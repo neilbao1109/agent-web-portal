@@ -1,5 +1,5 @@
 {
-  "name": "@anthropic-ai/agent-web-portal",
+  "name": "@agent-web-portal/core",
   "version": "0.1.0",
   "description": "MCP-compatible, skill-focused framework for AI Agents",
   "module": "index.ts",
