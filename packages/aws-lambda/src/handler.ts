@@ -72,9 +72,31 @@ export function createLambdaHandler(
     event: APIGatewayProxyEvent,
     _context: LambdaContext
   ): Promise<APIGatewayProxyResult> => {
-    const { path } = event;
+    const { path, httpMethod } = event;
 
     try {
+      // Handle CORS preflight
+      if (httpMethod === "OPTIONS") {
+        return {
+          statusCode: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id",
+          },
+          body: "",
+        };
+      }
+
+      // OAuth metadata discovery - return 404 to indicate no auth required
+      if (path === "/.well-known/oauth-authorization-server") {
+        return {
+          statusCode: 404,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "OAuth not supported" }),
+        };
+      }
+
       // Route: /mcp - MCP endpoint
       if (path === "/mcp" || path === "/") {
         return await handleMcpRequest(portal, event);
