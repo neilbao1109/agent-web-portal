@@ -4,8 +4,8 @@
  * Run with: bun run test
  */
 
-import { handler } from "./handler.ts";
 import type { APIGatewayProxyEvent, LambdaContext } from "@agent-web-portal/aws-lambda";
+import { handler } from "./handler.ts";
 
 // Mock Lambda context
 const mockContext: LambdaContext = {
@@ -60,7 +60,10 @@ console.log();
 // Test 2: List Tools
 console.log("2. List Tools");
 const toolsResult = await jsonRpc("tools/list");
-console.log("   Tools:", toolsResult.result.tools.map((t: { name: string }) => t.name));
+console.log(
+  "   Tools:",
+  toolsResult.result.tools.map((t: { name: string }) => t.name)
+);
 console.log();
 
 // Test 3: List Skills
