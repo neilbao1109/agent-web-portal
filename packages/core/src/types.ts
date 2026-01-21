@@ -89,6 +89,12 @@ export interface SkillRegistrationOptions {
   frontmatter: SkillFrontmatter;
 }
 
+/**
+ * Skills map for batch registration
+ * Key is the skill name, value is the skill definition
+ */
+export type SkillsMap = Record<string, SkillRegistrationOptions>;
+
 // ============================================================================
 // MCP Protocol Types
 // ============================================================================

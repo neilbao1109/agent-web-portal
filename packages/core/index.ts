@@ -17,9 +17,11 @@
  *     outputSchema: z.object({ results: z.array(z.string()) }),
  *     handler: async ({ query }) => ({ results: ["result1", "result2"] }),
  *   })
- *   .registerSkill("search-skill", {
- *     url: "/skills/search.md",
- *     frontmatter: { "allowed-tools": ["search"] },
+ *   .registerSkills({
+ *     "search-skill": {
+ *       url: "/skills/search-skill",
+ *       frontmatter: { "allowed-tools": ["search"] },
+ *     },
  *   })
  *   .build();
  *
@@ -63,6 +65,7 @@ export type {
   SkillFrontmatter,
   SkillRegistrationOptions,
   SkillsListResponse,
+  SkillsMap,
   ToolDefinition,
   // Tool types
   ToolHandler,

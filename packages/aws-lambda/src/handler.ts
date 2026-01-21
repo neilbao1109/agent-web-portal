@@ -178,9 +178,10 @@ async function handleSkillDownload(
   }
 
   // Generate presigned URL
+  const s3Key = skillsConfig.prefix ? `${skillsConfig.prefix}${skill.s3Key}` : skill.s3Key;
   const command = new GetObjectCommand({
     Bucket: skillsConfig.bucket,
-    Key: skill.s3Key,
+    Key: s3Key,
   });
 
   const presignedUrl = await getSignedUrl(getS3Client(), command, { expiresIn });

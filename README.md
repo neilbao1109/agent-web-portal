@@ -33,11 +33,13 @@ const portal = createAgentWebPortal({ name: "my-site" })
     description: "Generate a greeting",
     handler: async ({ name }) => ({ message: `Hello, ${name}!` }),
   })
-  .registerSkill("greeting-skill", {
-    url: "/skills/greeting.md",
-    frontmatter: {
-      name: "Greeting Skill",
-      "allowed-tools": ["greet"],
+  .registerSkills({
+    "greeting-skill": {
+      url: "/skills/greeting-skill",
+      frontmatter: {
+        name: "Greeting Skill",
+        "allowed-tools": ["greet"],
+      },
     },
   })
   .build();
@@ -101,18 +103,20 @@ builder.registerTool("search", {
 });
 ```
 
-### `.registerSkill(name, options)`
+### `.registerSkills(skills)`
 
-Register a skill with URL and frontmatter. The skill's markdown content should be served at the specified URL.
+Register multiple skills at once with URLs and frontmatter. Each skill's markdown content should be served at its specified URL.
 
 ```typescript
-builder.registerSkill("search-assistant", {
-  url: "/skills/search-assistant.md",
-  frontmatter: {
-    name: "Search Assistant",
-    description: "Help users search",
-    version: "1.0.0",
-    "allowed-tools": ["search", "external_mcp:analyze"],
+builder.registerSkills({
+  "search-assistant": {
+    url: "/skills/search-assistant",
+    frontmatter: {
+      name: "Search Assistant",
+      description: "Help users search",
+      version: "1.0.0",
+      "allowed-tools": ["search", "external_mcp:analyze"],
+    },
   },
 });
 ```

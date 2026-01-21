@@ -30,19 +30,20 @@ export class SkillRegistry {
   private skills: Map<string, SkillDefinition> = new Map();
 
   /**
-   * Register a new skill
-   * @param name - Unique skill name
-   * @param options - Skill definition including URL and frontmatter
+   * Register multiple skills at once
+   * @param skills - Map of skill names to skill definitions
    */
-  registerSkill(name: string, options: SkillRegistrationOptions): void {
-    if (this.skills.has(name)) {
-      throw new Error(`Skill "${name}" is already registered`);
-    }
+  registerSkills(skills: Record<string, SkillRegistrationOptions>): void {
+    for (const [name, options] of Object.entries(skills)) {
+      if (this.skills.has(name)) {
+        throw new Error(`Skill "${name}" is already registered`);
+      }
 
-    this.skills.set(name, {
-      url: options.url,
-      frontmatter: options.frontmatter,
-    });
+      this.skills.set(name, {
+        url: options.url,
+        frontmatter: options.frontmatter,
+      });
+    }
   }
 
   /**

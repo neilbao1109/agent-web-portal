@@ -60,14 +60,16 @@ const portal = createAgentWebPortal({
       };
     },
   })
-  // Register a skill that uses the greet tool
-  .registerSkill("greeting-assistant", {
-    url: "/skills/greeting-assistant.md",
-    frontmatter: {
-      name: "Greeting Assistant",
-      description: "A skill for greeting users in multiple languages",
-      version: "1.0.0",
-      "allowed-tools": ["greet"],
+  // Register skills
+  .registerSkills({
+    "greeting-assistant": {
+      url: "/skills/greeting-assistant",
+      frontmatter: {
+        name: "Greeting Assistant",
+        description: "A skill for greeting users in multiple languages",
+        version: "1.0.0",
+        "allowed-tools": ["greet"],
+      },
     },
   })
   // Build the portal (validates skills against tools)

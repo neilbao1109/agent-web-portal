@@ -37,9 +37,11 @@ export interface AgentWebPortalOptions {
  *     outputSchema: z.object({ message: z.string() }),
  *     handler: async ({ name }) => ({ message: `Hello, ${name}!` }),
  *   })
- *   .registerSkill("greeting-skill", {
- *     url: "/skills/greeting.md",
- *     frontmatter: { "allowed-tools": ["greet"] },
+ *   .registerSkills({
+ *     "greeting-skill": {
+ *       url: "/skills/greeting-skill",
+ *       frontmatter: { "allowed-tools": ["greet"] },
+ *     },
  *   })
  *   .build();
  * ```
@@ -75,14 +77,27 @@ export class AgentWebPortalBuilder {
   }
 
   /**
-   * Register a skill with URL, frontmatter, and optional markdown
+   * Register multiple skills at once
    *
-   * @param name - Unique skill name
-   * @param options - Skill definition with URL, frontmatter, and markdown
+   * @param skills - Map of skill names to skill definitions
    * @returns this - for method chaining
+   *
+   * @example
+   * ```typescript
+   * portal.registerSkills({
+   *   "greeting-skill": {
+   *     url: "/skills/greeting-skill",
+   *     frontmatter: { "allowed-tools": ["greet"] },
+   *   },
+   *   "search-skill": {
+   *     url: "/skills/search-skill",
+   *     frontmatter: { "allowed-tools": ["search"] },
+   *   },
+   * });
+   * ```
    */
-  registerSkill(name: string, options: SkillRegistrationOptions): this {
-    this.skillRegistry.registerSkill(name, options);
+  registerSkills(skills: Record<string, SkillRegistrationOptions>): this {
+    this.skillRegistry.registerSkills(skills);
     return this;
   }
 

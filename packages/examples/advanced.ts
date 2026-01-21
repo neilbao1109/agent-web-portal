@@ -153,27 +153,28 @@ const portal = createAgentWebPortal({
       };
     },
   })
-  // Shopping Assistant Skill
-  .registerSkill("shopping-assistant", {
-    url: "/skills/shopping-assistant.md",
-    frontmatter: {
-      name: "Shopping Assistant",
-      description: "Complete e-commerce shopping flow",
-      version: "2.0.0",
-      "allowed-tools": ["search_products", "manage_cart", "checkout"],
+  // Register all skills at once
+  .registerSkills({
+    "shopping-assistant": {
+      url: "/skills/shopping-assistant",
+      frontmatter: {
+        name: "Shopping Assistant",
+        description: "Complete e-commerce shopping flow",
+        version: "2.0.0",
+        "allowed-tools": ["search_products", "manage_cart", "checkout"],
+      },
     },
-  })
-  // Product Comparison Skill (with cross-MCP reference)
-  .registerSkill("product-comparison", {
-    url: "/skills/product-comparison.md",
-    frontmatter: {
-      name: "Product Comparison",
-      description: "Compare products across sources",
-      version: "1.0.0",
-      "allowed-tools": [
-        "search_products",
-        "external_reviews:get_reviews", // Cross-MCP reference
-      ],
+    "product-comparison": {
+      url: "/skills/product-comparison",
+      frontmatter: {
+        name: "Product Comparison",
+        description: "Compare products across sources",
+        version: "1.0.0",
+        "allowed-tools": [
+          "search_products",
+          "external_reviews:get_reviews", // Cross-MCP reference
+        ],
+      },
     },
   })
   .build();

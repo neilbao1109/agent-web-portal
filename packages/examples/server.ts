@@ -54,13 +54,15 @@ const basicPortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkill("greeting-assistant", {
-    url: "/skills/greeting-assistant.md",
-    frontmatter: {
-      name: "Greeting Assistant",
-      description: "A skill for greeting users in multiple languages",
-      version: "1.0.0",
-      "allowed-tools": ["greet"],
+  .registerSkills({
+    "greeting-assistant": {
+      url: "/skills/greeting-assistant",
+      frontmatter: {
+        name: "Greeting Assistant",
+        description: "A skill for greeting users in multiple languages",
+        version: "1.0.0",
+        "allowed-tools": ["greet"],
+      },
     },
   })
   .build();
@@ -194,25 +196,27 @@ const ecommercePortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkill("shopping-assistant", {
-    url: "/skills/shopping-assistant.md",
-    frontmatter: {
-      name: "Shopping Assistant",
-      description: "Complete e-commerce shopping flow",
-      version: "2.0.0",
-      "allowed-tools": ["search_products", "manage_cart", "checkout"],
+  .registerSkills({
+    "shopping-assistant": {
+      url: "/skills/shopping-assistant",
+      frontmatter: {
+        name: "Shopping Assistant",
+        description: "Complete e-commerce shopping flow",
+        version: "2.0.0",
+        "allowed-tools": ["search_products", "manage_cart", "checkout"],
+      },
     },
-  })
-  .registerSkill("product-comparison", {
-    url: "/skills/product-comparison.md",
-    frontmatter: {
-      name: "Product Comparison",
-      description: "Compare products across sources",
-      version: "1.0.0",
-      "allowed-tools": [
-        "search_products",
-        "external_reviews:get_reviews", // Cross-MCP reference
-      ],
+    "product-comparison": {
+      url: "/skills/product-comparison",
+      frontmatter: {
+        name: "Product Comparison",
+        description: "Compare products across sources",
+        version: "1.0.0",
+        "allowed-tools": [
+          "search_products",
+          "external_reviews:get_reviews", // Cross-MCP reference
+        ],
+      },
     },
   })
   .build();
