@@ -1,14 +1,14 @@
 import type { ZodSchema } from "zod";
-import { ToolRegistry } from "./tool-registry.ts";
-import { SkillRegistry } from "./skill-registry.ts";
 import { createHttpHandler } from "./http-handler.ts";
+import { SkillRegistry } from "./skill-registry.ts";
+import { ToolRegistry } from "./tool-registry.ts";
 import type {
-  ToolRegistrationOptions,
-  SkillRegistrationOptions,
   AgentWebPortalInstance,
-  McpToolsListResponse,
-  SkillsListResponse,
   HttpRequest,
+  McpToolsListResponse,
+  SkillRegistrationOptions,
+  SkillsListResponse,
+  ToolRegistrationOptions,
 } from "./types.ts";
 
 /**
@@ -25,10 +25,10 @@ export interface AgentWebPortalOptions {
 
 /**
  * AgentWebPortal Builder
- * 
+ *
  * A builder-style class for creating an MCP-compatible, skill-focused
  * framework that exposes site functionality to AI Agents.
- * 
+ *
  * @example
  * ```typescript
  * const portal = new AgentWebPortalBuilder({ name: "my-portal" })
@@ -62,15 +62,12 @@ export class AgentWebPortalBuilder {
 
   /**
    * Register a tool with input/output schemas and handler
-   * 
+   *
    * @param name - Unique tool name
    * @param options - Tool definition with schemas and handler
    * @returns this - for method chaining
    */
-  registerTool<
-    TInputSchema extends ZodSchema,
-    TOutputSchema extends ZodSchema,
-  >(
+  registerTool<TInputSchema extends ZodSchema, TOutputSchema extends ZodSchema>(
     name: string,
     options: ToolRegistrationOptions<TInputSchema, TOutputSchema>
   ): this {
@@ -80,7 +77,7 @@ export class AgentWebPortalBuilder {
 
   /**
    * Register a skill with URL, frontmatter, and optional markdown
-   * 
+   *
    * @param name - Unique skill name
    * @param options - Skill definition with URL, frontmatter, and markdown
    * @returns this - for method chaining
@@ -92,10 +89,10 @@ export class AgentWebPortalBuilder {
 
   /**
    * Build the AgentWebPortal instance
-   * 
+   *
    * Validates all skills against registered tools and creates
    * the final instance with HTTP handler.
-   * 
+   *
    * @throws SkillValidationError if any skill references missing tools
    * @returns AgentWebPortalInstance
    */
@@ -104,11 +101,7 @@ export class AgentWebPortalBuilder {
     this.skillRegistry.validateSkills(this.toolRegistry);
 
     // Create the instance
-    return new AgentWebPortalInstanceImpl(
-      this.options,
-      this.toolRegistry,
-      this.skillRegistry
-    );
+    return new AgentWebPortalInstanceImpl(this.options, this.toolRegistry, this.skillRegistry);
   }
 }
 
@@ -173,12 +166,10 @@ class AgentWebPortalInstanceImpl implements AgentWebPortalInstance {
 
 /**
  * Create a new AgentWebPortal builder
- * 
+ *
  * @param options - Optional configuration
  * @returns AgentWebPortalBuilder instance
  */
-export function createAgentWebPortal(
-  options?: AgentWebPortalOptions
-): AgentWebPortalBuilder {
+export function createAgentWebPortal(options?: AgentWebPortalOptions): AgentWebPortalBuilder {
   return new AgentWebPortalBuilder(options);
 }

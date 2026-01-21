@@ -69,7 +69,7 @@ const CheckoutOutputSchema = z.object({
 // =============================================================================
 
 // Simulated cart state
-let cartItems: Map<string, number> = new Map();
+const cartItems: Map<string, number> = new Map();
 
 const portal = createAgentWebPortal({
   name: "ecommerce-portal",
@@ -208,9 +208,9 @@ Compare products using local search and external reviews.
 // 3. Start HTTP Server for E2E Testing
 // =============================================================================
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
-const server = Bun.serve({
+const _server = Bun.serve({
   port: PORT,
   fetch: async (req) => {
     const url = new URL(req.url);

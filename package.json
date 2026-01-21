@@ -8,13 +8,21 @@
     "start": "bun run examples/server.ts",
     "test": "bun test",
     "test:e2e": "bun test examples/e2e.test.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "lint:md": "markdownlint '**/*.md' --ignore node_modules",
+    "lint:md:fix": "markdownlint '**/*.md' --ignore node_modules --fix",
+    "check": "bun run lint && bun run lint:md",
+    "check:fix": "bun run lint:fix && bun run lint:md:fix"
   },
   "dependencies": {
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@biomejs/biome": "^2.3.11",
+    "@types/bun": "latest",
+    "markdownlint-cli": "^0.47.0"
   },
   "peerDependencies": {
     "typescript": "^5"

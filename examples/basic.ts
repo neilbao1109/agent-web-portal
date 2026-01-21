@@ -101,7 +101,7 @@ To greet a user named "Alice" in French:
 
 const PORT = 3000;
 
-const server = Bun.serve({
+const _server = Bun.serve({
   port: PORT,
   fetch: async (req) => {
     const url = new URL(req.url);

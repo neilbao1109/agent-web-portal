@@ -1,12 +1,12 @@
 import type { ZodSchema } from "zod";
-import { zodToJsonSchema } from "./utils/zod-to-json-schema.ts";
 import type {
-  ToolDefinition,
-  ToolRegistrationOptions,
   McpToolSchema,
   McpToolsListResponse,
+  ToolDefinition,
+  ToolRegistrationOptions,
 } from "./types.ts";
 import { ToolNotFoundError, ToolValidationError } from "./types.ts";
+import { zodToJsonSchema } from "./utils/zod-to-json-schema.ts";
 
 /**
  * Registry for managing tools
@@ -20,10 +20,10 @@ export class ToolRegistry {
    * @param name - Unique tool name
    * @param options - Tool definition including schemas and handler
    */
-  registerTool<
-    TInputSchema extends ZodSchema,
-    TOutputSchema extends ZodSchema,
-  >(name: string, options: ToolRegistrationOptions<TInputSchema, TOutputSchema>): void {
+  registerTool<TInputSchema extends ZodSchema, TOutputSchema extends ZodSchema>(
+    name: string,
+    options: ToolRegistrationOptions<TInputSchema, TOutputSchema>
+  ): void {
     if (this.tools.has(name)) {
       throw new Error(`Tool "${name}" is already registered`);
     }
@@ -73,10 +73,7 @@ export class ToolRegistry {
     // Validate input
     const inputResult = tool.inputSchema.safeParse(args);
     if (!inputResult.success) {
-      throw new ToolValidationError(
-        name,
-        `Invalid input: ${inputResult.error.message}`
-      );
+      throw new ToolValidationError(name, `Invalid input: ${inputResult.error.message}`);
     }
 
     // Execute handler
@@ -85,10 +82,7 @@ export class ToolRegistry {
     // Validate output
     const outputResult = tool.outputSchema.safeParse(result);
     if (!outputResult.success) {
-      throw new ToolValidationError(
-        name,
-        `Invalid output: ${outputResult.error.message}`
-      );
+      throw new ToolValidationError(name, `Invalid output: ${outputResult.error.message}`);
     }
 
     return outputResult.data;
@@ -116,7 +110,7 @@ export class ToolRegistry {
    */
   toMcpToolsList(): McpToolsListResponse {
     const tools: McpToolSchema[] = [];
-    
+
     for (const name of this.tools.keys()) {
       const schema = this.toMcpSchema(name);
       if (schema) {

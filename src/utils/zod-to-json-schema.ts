@@ -63,7 +63,7 @@ function parseZodDef(def: any): Record<string, unknown> {
       const shape = def.shape();
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = parseZodDef((value as any)._def);
-        
+
         // Check if field is required (not optional)
         if ((value as any)._def.typeName !== "ZodOptional") {
           required.push(key);
@@ -135,9 +135,7 @@ function parseZodDef(def: any): Record<string, unknown> {
     }
 
     case "ZodDiscriminatedUnion": {
-      const options = Array.from(def.optionsMap.values()).map((opt: any) =>
-        parseZodDef(opt._def)
-      );
+      const options = Array.from(def.optionsMap.values()).map((opt: any) => parseZodDef(opt._def));
       return {
         oneOf: options,
         discriminator: { propertyName: def.discriminator },

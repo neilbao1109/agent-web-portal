@@ -130,7 +130,7 @@ const CheckoutOutputSchema = z.object({
 });
 
 // Simulated cart state
-let cartItems: Map<string, number> = new Map();
+const cartItems: Map<string, number> = new Map();
 
 const ecommercePortal = createAgentWebPortal({
   name: "ecommerce-portal",
@@ -256,7 +256,7 @@ Compare products using local search and external reviews.
 // 3. Unified HTTP Server
 // =============================================================================
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 /**
  * Route request to the appropriate portal based on path prefix

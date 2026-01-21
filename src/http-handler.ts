@@ -1,11 +1,10 @@
 import type {
   AgentWebPortalInstance,
   HttpRequest,
+  JsonRpcErrorResponse,
   JsonRpcRequest,
   JsonRpcResponse,
   JsonRpcSuccessResponse,
-  JsonRpcErrorResponse,
-  McpToolsCallParams,
   McpToolsCallResponse,
 } from "./types.ts";
 import { ToolNotFoundError, ToolValidationError } from "./types.ts";
@@ -53,19 +52,17 @@ function isValidJsonRpcRequest(body: unknown): body is JsonRpcRequest {
   }
 
   const req = body as Record<string, unknown>;
-  
+
   return (
     req.jsonrpc === "2.0" &&
     typeof req.method === "string" &&
-    (req.id === undefined ||
-      typeof req.id === "string" ||
-      typeof req.id === "number")
+    (req.id === undefined || typeof req.id === "string" || typeof req.id === "number")
   );
 }
 
 /**
  * Create the HTTP handler for the AgentWebPortal
- * 
+ *
  * Handles MCP-compatible POST requests with support for:
  * - initialize
  * - tools/list
@@ -90,24 +87,19 @@ export function createHttpHandler(
     }
 
     let body: unknown;
-    
+
     try {
       body = await request.json();
     } catch {
-      return new Response(
-        JSON.stringify(errorResponse(null, JSONRPC_PARSE_ERROR, "Parse error")),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify(errorResponse(null, JSONRPC_PARSE_ERROR, "Parse error")), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // Handle batch requests
     if (Array.isArray(body)) {
-      const responses = await Promise.all(
-        body.map((req) => handleSingleRequest(portal, req))
-      );
+      const responses = await Promise.all(body.map((req) => handleSingleRequest(portal, req)));
       return new Response(JSON.stringify(responses), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -208,11 +200,7 @@ async function handleToolsCall(
   params?: Record<string, unknown>
 ): Promise<JsonRpcResponse> {
   if (!params || typeof params.name !== "string") {
-    return errorResponse(
-      id,
-      JSONRPC_INVALID_PARAMS,
-      "Invalid params: 'name' is required"
-    );
+    return errorResponse(id, JSONRPC_INVALID_PARAMS, "Invalid params: 'name' is required");
   }
 
   const name = params.name;

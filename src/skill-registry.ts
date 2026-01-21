@@ -1,3 +1,4 @@
+import type { ToolRegistry } from "./tool-registry.ts";
 import type {
   SkillDefinition,
   SkillFrontmatter,
@@ -5,7 +6,6 @@ import type {
   SkillsListResponse,
 } from "./types.ts";
 import { SkillValidationError } from "./types.ts";
-import type { ToolRegistry } from "./tool-registry.ts";
 
 /**
  * Parse tool reference from skill markdown
@@ -84,7 +84,7 @@ export class SkillRegistry {
    */
   parseToolReference(reference: string): ParsedToolReference {
     const trimmed = reference.trim();
-    
+
     if (trimmed.includes(":")) {
       const [mcpAlias, toolName] = trimmed.split(":", 2);
       return {
@@ -168,10 +168,7 @@ export class SkillRegistry {
    * @param markdown - Original markdown
    * @param rewriteMap - Map of original references to rewritten names
    */
-  rewriteToolReferences(
-    markdown: string,
-    rewriteMap: Map<string, string>
-  ): string {
+  rewriteToolReferences(markdown: string, rewriteMap: Map<string, string>): string {
     return markdown.replace(/\{\{([^}]+)\}\}/g, (match, ref: string) => {
       const trimmed = ref.trim();
       const rewritten = rewriteMap.get(trimmed);

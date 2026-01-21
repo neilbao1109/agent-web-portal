@@ -7,7 +7,7 @@
  * The server is started automatically via beforeAll/afterAll hooks.
  */
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "bun";
 
 const PORT = 3456; // Use a different port for tests to avoid conflicts
@@ -77,9 +77,7 @@ beforeAll(async () => {
   });
 
   const SearchOutputSchema = z.object({
-    results: z.array(
-      z.object({ title: z.string(), url: z.string(), snippet: z.string() })
-    ),
+    results: z.array(z.object({ title: z.string(), url: z.string(), snippet: z.string() })),
     total: z.number(),
   });
 
@@ -106,7 +104,7 @@ beforeAll(async () => {
     estimatedDelivery: z.string().optional(),
   });
 
-  let cartItems: Map<string, number> = new Map();
+  const cartItems: Map<string, number> = new Map();
 
   const ecommercePortal = createAgentWebPortal({
     name: "ecommerce-portal",
@@ -119,8 +117,16 @@ beforeAll(async () => {
       description: "Search for products in the catalog",
       handler: async ({ query, limit }) => {
         const mockResults = [
-          { title: `${query} - Product A`, url: "/products/a", snippet: `Best ${query} on the market` },
-          { title: `${query} - Product B`, url: "/products/b", snippet: `Premium ${query} with warranty` },
+          {
+            title: `${query} - Product A`,
+            url: "/products/a",
+            snippet: `Best ${query} on the market`,
+          },
+          {
+            title: `${query} - Product B`,
+            url: "/products/b",
+            snippet: `Premium ${query} with warranty`,
+          },
         ].slice(0, limit);
         return { results: mockResults, total: mockResults.length };
       },
@@ -148,7 +154,11 @@ beforeAll(async () => {
           productId: id,
           quantity: qty,
         }));
-        return { success: true, items, message: `Cart ${action} completed. ${items.length} items in cart.` };
+        return {
+          success: true,
+          items,
+          message: `Cart ${action} completed. ${items.length} items in cart.`,
+        };
       },
     })
     .registerTool("checkout", {
@@ -323,12 +333,8 @@ describe("Basic Portal (/basic)", () => {
 
     expect(result.result).toBeDefined();
     expect(result.result["greeting-assistant"]).toBeDefined();
-    expect(result.result["greeting-assistant"].url).toBe(
-      "/skills/greeting-assistant.md"
-    );
-    expect(
-      result.result["greeting-assistant"].frontmatter["allowed-tools"]
-    ).toContain("greet");
+    expect(result.result["greeting-assistant"].url).toBe("/skills/greeting-assistant.md");
+    expect(result.result["greeting-assistant"].frontmatter["allowed-tools"]).toContain("greet");
   });
 
   test("tools/call invokes greet tool (English)", async () => {
@@ -427,15 +433,17 @@ describe("E-commerce Portal (/ecommerce)", () => {
 
     // Shopping assistant skill
     expect(result.result["shopping-assistant"]).toBeDefined();
-    expect(
-      result.result["shopping-assistant"].frontmatter["allowed-tools"]
-    ).toEqual(["search_products", "manage_cart", "checkout"]);
+    expect(result.result["shopping-assistant"].frontmatter["allowed-tools"]).toEqual([
+      "search_products",
+      "manage_cart",
+      "checkout",
+    ]);
 
     // Product comparison skill with cross-MCP reference
     expect(result.result["product-comparison"]).toBeDefined();
-    expect(
-      result.result["product-comparison"].frontmatter["allowed-tools"]
-    ).toContain("external_reviews:get_reviews");
+    expect(result.result["product-comparison"].frontmatter["allowed-tools"]).toContain(
+      "external_reviews:get_reviews"
+    );
   });
 
   test("search_products tool works", async () => {
@@ -632,9 +640,7 @@ describe("Portal Isolation", () => {
     const ecommerceTools = await jsonRpc("/ecommerce", "tools/list");
 
     const basicToolNames = basicTools.result.tools.map((t: any) => t.name);
-    const ecommerceToolNames = ecommerceTools.result.tools.map(
-      (t: any) => t.name
-    );
+    const ecommerceToolNames = ecommerceTools.result.tools.map((t: any) => t.name);
 
     expect(basicToolNames).toContain("greet");
     expect(basicToolNames).not.toContain("search_products");

@@ -1,4 +1,4 @@
-import { z, type ZodSchema } from "zod";
+import type { ZodSchema, z } from "zod";
 
 // ============================================================================
 // Skill Frontmatter Types
@@ -51,9 +51,7 @@ export type SkillsListResponse = Record<
 /**
  * Tool handler function type
  */
-export type ToolHandler<TInput = unknown, TOutput = unknown> = (
-  input: TInput
-) => Promise<TOutput>;
+export type ToolHandler<TInput = unknown, TOutput = unknown> = (input: TInput) => Promise<TOutput>;
 
 /**
  * Tool definition with schemas and handler
@@ -221,9 +219,7 @@ export class ToolNotFoundError extends Error {
 
 export class SkillValidationError extends Error {
   constructor(skillName: string, missingTools: string[]) {
-    super(
-      `Skill "${skillName}" references missing tools: ${missingTools.join(", ")}`
-    );
+    super(`Skill "${skillName}" references missing tools: ${missingTools.join(", ")}`);
     this.name = "SkillValidationError";
   }
 }

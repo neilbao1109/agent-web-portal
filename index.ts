@@ -34,52 +34,46 @@
 // Core exports
 export {
   AgentWebPortalBuilder,
-  createAgentWebPortal,
   type AgentWebPortalOptions,
+  createAgentWebPortal,
 } from "./src/agent-web-portal.ts";
+export type { ParsedToolReference } from "./src/skill-registry.ts";
+export { SkillRegistry } from "./src/skill-registry.ts";
 
+// Registry exports (for advanced usage)
+export { ToolRegistry } from "./src/tool-registry.ts";
 // Type exports
 export type {
-  // Skill types
-  SkillFrontmatter,
-  SkillDefinition,
-  SkillsListResponse,
-  SkillRegistrationOptions,
-
-  // Tool types
-  ToolHandler,
-  ToolDefinition,
-  ToolRegistrationOptions,
-
+  // Instance type
+  AgentWebPortalInstance,
+  // HTTP types
+  HttpRequest,
+  HttpResponseOptions,
+  JsonRpcErrorResponse,
   // MCP types
   JsonRpcRequest,
   JsonRpcResponse,
   JsonRpcSuccessResponse,
-  JsonRpcErrorResponse,
   McpToolSchema,
-  McpToolsListResponse,
   McpToolsCallParams,
   McpToolsCallResponse,
-
-  // HTTP types
-  HttpRequest,
-  HttpResponseOptions,
-
-  // Instance type
-  AgentWebPortalInstance,
+  McpToolsListResponse,
+  SkillDefinition,
+  // Skill types
+  SkillFrontmatter,
+  SkillRegistrationOptions,
+  SkillsListResponse,
+  ToolDefinition,
+  // Tool types
+  ToolHandler,
+  ToolRegistrationOptions,
 } from "./src/types.ts";
-
 // Error exports
 export {
-  ToolNotFoundError,
   SkillValidationError,
+  ToolNotFoundError,
   ToolValidationError,
 } from "./src/types.ts";
-
-// Registry exports (for advanced usage)
-export { ToolRegistry } from "./src/tool-registry.ts";
-export { SkillRegistry } from "./src/skill-registry.ts";
-export type { ParsedToolReference } from "./src/skill-registry.ts";
 
 // Utility exports
 export { zodToJsonSchema } from "./src/utils/zod-to-json-schema.ts";
