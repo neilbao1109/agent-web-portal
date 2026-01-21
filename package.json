@@ -13,8 +13,8 @@
     "lint:fix": "biome check --write .",
     "lint:md": "markdownlint '**/*.md' --ignore node_modules",
     "lint:md:fix": "markdownlint '**/*.md' --ignore node_modules --fix",
-    "check": "bun run lint && bun run lint:md",
-    "check:fix": "bun run lint:fix && bun run lint:md:fix"
+    "check": "tsc --noEmit && bun run lint && bun run lint:md",
+    "check:fix": "tsc --noEmit && bun run lint:fix && bun run lint:md:fix"
   },
   "dependencies": {
     "zod": "^3.23.8"

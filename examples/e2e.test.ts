@@ -4,237 +4,45 @@
  * Run tests with:
  *   bun test examples/e2e.test.ts
  *
- * The server is started automatically via beforeAll/afterAll hooks.
+ * The server (examples/server.ts) is started as a background process.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { Server } from "bun";
+import type { Subprocess } from "bun";
 
 const PORT = 3456; // Use a different port for tests to avoid conflicts
 const BASE_URL = `http://localhost:${PORT}`;
 
-let server: Server;
+let serverProcess: Subprocess;
 
-// Import and start server before tests
+// Start server as background process before tests
 beforeAll(async () => {
-  // Dynamically import server components
-  const { z } = await import("zod");
-  const { createAgentWebPortal } = await import("../index.ts");
-
-  // ==========================================================================
-  // 1. Basic Greeting Portal
-  // ==========================================================================
-
-  const GreetInputSchema = z.object({
-    name: z.string(),
-    language: z.enum(["en", "es", "fr", "de", "ja"]).optional().default("en"),
+  // Start the server as a subprocess with custom PORT
+  serverProcess = Bun.spawn(["bun", "run", "examples/server.ts"], {
+    env: { ...process.env, PORT: String(PORT) },
+    stdout: "inherit",
+    stderr: "inherit",
   });
 
-  const GreetOutputSchema = z.object({
-    message: z.string(),
-    timestamp: z.string(),
-  });
-
-  const basicPortal = createAgentWebPortal({
-    name: "greeting-portal",
-    version: "1.0.0",
-    description: "A simple greeting service for AI Agents",
-  })
-    .registerTool("greet", {
-      inputSchema: GreetInputSchema,
-      outputSchema: GreetOutputSchema,
-      description: "Generate a greeting message in various languages",
-      handler: async ({ name, language }) => {
-        const greetings: Record<string, string> = {
-          en: `Hello, ${name}!`,
-          es: `¡Hola, ${name}!`,
-          fr: `Bonjour, ${name}!`,
-          de: `Hallo, ${name}!`,
-          ja: `こんにちは、${name}さん！`,
-        };
-        return {
-          message: greetings[language ?? "en"] ?? greetings.en!,
-          timestamp: new Date().toISOString(),
-        };
-      },
-    })
-    .registerSkill("greeting-assistant", {
-      url: "/skills/greeting-assistant.md",
-      frontmatter: {
-        name: "Greeting Assistant",
-        "allowed-tools": ["greet"],
-      },
-    })
-    .build();
-
-  // ==========================================================================
-  // 2. E-commerce Portal
-  // ==========================================================================
-
-  const SearchInputSchema = z.object({
-    query: z.string(),
-    limit: z.number().optional().default(10),
-  });
-
-  const SearchOutputSchema = z.object({
-    results: z.array(z.object({ title: z.string(), url: z.string(), snippet: z.string() })),
-    total: z.number(),
-  });
-
-  const CartInputSchema = z.object({
-    action: z.enum(["add", "remove", "list", "clear"]),
-    productId: z.string().optional(),
-    quantity: z.number().optional().default(1),
-  });
-
-  const CartOutputSchema = z.object({
-    success: z.boolean(),
-    items: z.array(z.object({ productId: z.string(), quantity: z.number() })),
-    message: z.string(),
-  });
-
-  const CheckoutInputSchema = z.object({
-    shippingAddress: z.string(),
-    paymentMethod: z.enum(["card", "paypal", "crypto"]),
-  });
-
-  const CheckoutOutputSchema = z.object({
-    orderId: z.string(),
-    status: z.enum(["pending", "confirmed", "failed"]),
-    estimatedDelivery: z.string().optional(),
-  });
-
-  const cartItems: Map<string, number> = new Map();
-
-  const ecommercePortal = createAgentWebPortal({
-    name: "ecommerce-portal",
-    version: "2.0.0",
-    description: "E-commerce Agent Web Portal",
-  })
-    .registerTool("search_products", {
-      inputSchema: SearchInputSchema,
-      outputSchema: SearchOutputSchema,
-      description: "Search for products in the catalog",
-      handler: async ({ query, limit }) => {
-        const mockResults = [
-          {
-            title: `${query} - Product A`,
-            url: "/products/a",
-            snippet: `Best ${query} on the market`,
-          },
-          {
-            title: `${query} - Product B`,
-            url: "/products/b",
-            snippet: `Premium ${query} with warranty`,
-          },
-        ].slice(0, limit);
-        return { results: mockResults, total: mockResults.length };
-      },
-    })
-    .registerTool("manage_cart", {
-      inputSchema: CartInputSchema,
-      outputSchema: CartOutputSchema,
-      description: "Manage shopping cart",
-      handler: async ({ action, productId, quantity }) => {
-        switch (action) {
-          case "add":
-            if (productId) {
-              const current = cartItems.get(productId) ?? 0;
-              cartItems.set(productId, current + quantity!);
-            }
-            break;
-          case "remove":
-            if (productId) cartItems.delete(productId);
-            break;
-          case "clear":
-            cartItems.clear();
-            break;
-        }
-        const items = Array.from(cartItems.entries()).map(([id, qty]) => ({
-          productId: id,
-          quantity: qty,
-        }));
-        return {
-          success: true,
-          items,
-          message: `Cart ${action} completed. ${items.length} items in cart.`,
-        };
-      },
-    })
-    .registerTool("checkout", {
-      inputSchema: CheckoutInputSchema,
-      outputSchema: CheckoutOutputSchema,
-      description: "Complete checkout process",
-      handler: async () => {
-        const orderId = `ORD-${Date.now()}`;
-        cartItems.clear();
-        return {
-          orderId,
-          status: "confirmed" as const,
-          estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        };
-      },
-    })
-    .registerSkill("shopping-assistant", {
-      url: "/skills/shopping-assistant.md",
-      frontmatter: {
-        name: "Shopping Assistant",
-        "allowed-tools": ["search_products", "manage_cart", "checkout"],
-      },
-    })
-    .registerSkill("product-comparison", {
-      url: "/skills/product-comparison.md",
-      frontmatter: {
-        name: "Product Comparison",
-        "allowed-tools": ["search_products", "external_reviews:get_reviews"],
-      },
-    })
-    .build();
-
-  // ==========================================================================
-  // 3. Start Server
-  // ==========================================================================
-
-  server = Bun.serve({
-    port: PORT,
-    fetch: async (req) => {
-      const url = new URL(req.url);
-      const pathname = url.pathname;
-
-      if (pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok" }), {
-          headers: { "Content-Type": "application/json" },
-        });
+  // Wait for server to be ready
+  const maxRetries = 30;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch(`${BASE_URL}/health`);
+      if (response.ok) {
+        return; // Server is ready
       }
+    } catch {
+      // Server not ready yet, wait and retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 
-      if (pathname === "/basic" || pathname === "/basic/mcp") {
-        return basicPortal.handleRequest(req);
-      }
-
-      if (pathname === "/ecommerce" || pathname === "/ecommerce/mcp") {
-        return ecommercePortal.handleRequest(req);
-      }
-
-      if (pathname === "/") {
-        return new Response(
-          JSON.stringify({
-            name: "Agent Web Portal - Test Server",
-            portals: {
-              basic: { endpoint: "/basic" },
-              ecommerce: { endpoint: "/ecommerce" },
-            },
-          }),
-          { headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response("Not Found", { status: 404 });
-    },
-  });
+  throw new Error("Server failed to start within timeout");
 });
 
 afterAll(() => {
-  server?.stop();
+  serverProcess?.kill();
 });
 
 // Response type for JSON-RPC
