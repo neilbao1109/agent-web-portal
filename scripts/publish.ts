@@ -4,17 +4,16 @@
  *
  * Features:
  * - Lists all publishable packages
- * - Compares versions with npm registry
+ * - Compares versions with npm registry (skips up-to-date packages)
  * - Prepares packages in .publish folder (replaces workspace:* with real versions)
- * - Shows publish order and commands
+ * - Generates platform-specific publish script (PowerShell on Windows, Bash on Unix)
  *
  * Usage:
- *   bun run scripts/publish.ts
+ *   bun run publish:prepare
  *
- * After running, manually publish each package in order:
- *   cd .publish/core && npm publish --access public
- *   cd .publish/auth && npm publish --access public
- *   ...
+ * Then run the generated script:
+ *   Windows: powershell -ExecutionPolicy Bypass -File ".publish\publish.ps1"
+ *   Unix:    bash .publish/publish.sh
  */
 
 import { execSync } from "node:child_process";
@@ -343,34 +342,95 @@ async function main() {
     success(`Prepared: ${publishPath}`);
   }
 
-  // Print manual publish instructions
+  // Generate platform-specific publish script
+  const isWindows = process.platform === "win32";
+  const scriptPath = join(PUBLISH_DIR, isWindows ? "publish.ps1" : "publish.sh");
+  
+  let scriptContent: string;
+  
+  if (isWindows) {
+    // PowerShell script
+    const commands = toPublish.map((pkg, i) => {
+      const folderName = basename(pkg.path);
+      return `
+Write-Host ""
+Write-Host "[${i + 1}/${toPublish.length}] Publishing ${pkg.name}@${pkg.version}..." -ForegroundColor Cyan
+Push-Location "${folderName}"
+npm publish --access public
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Failed to publish ${pkg.name}" -ForegroundColor Red
+    Pop-Location
+    exit 1
+}
+Write-Host "Published ${pkg.name}@${pkg.version}" -ForegroundColor Green
+Pop-Location`;
+    });
+
+    scriptContent = `# Auto-generated publish script
+# Run with: powershell -ExecutionPolicy Bypass -File .publish\\publish.ps1
+
+$ErrorActionPreference = "Stop"
+Set-Location "${PUBLISH_DIR}"
+
+Write-Host ""
+Write-Host "Publishing ${toPublish.length} packages..." -ForegroundColor Yellow
+Write-Host ""
+${commands.join("\n")}
+
+Write-Host ""
+Write-Host "All packages published successfully!" -ForegroundColor Green
+Write-Host ""
+`;
+  } else {
+    // Bash script
+    const commands = toPublish.map((pkg, i) => {
+      const folderName = basename(pkg.path);
+      return `
+echo ""
+echo "[${i + 1}/${toPublish.length}] Publishing ${pkg.name}@${pkg.version}..."
+cd "${folderName}"
+npm publish --access public || { echo "Failed to publish ${pkg.name}"; exit 1; }
+echo "✓ Published ${pkg.name}@${pkg.version}"
+cd ..`;
+    });
+
+    scriptContent = `#!/bin/bash
+# Auto-generated publish script
+# Run with: bash .publish/publish.sh
+
+set -e
+cd "${PUBLISH_DIR}"
+
+echo ""
+echo "Publishing ${toPublish.length} packages..."
+echo ""
+${commands.join("\n")}
+
+echo ""
+echo "✓ All packages published successfully!"
+echo ""
+`;
+  }
+
+  writeFileSync(scriptPath, scriptContent);
+  
   console.log("\n");
   log("Preparation Complete!");
   log("=====================\n");
   
-  console.log("Packages are ready in .publish/ folder.");
-  console.log("Please publish them manually in this order:\n");
+  success(`Publish script generated: ${scriptPath}\n`);
   
-  const isWindows = process.platform === "win32";
-  const pathSep = isWindows ? "\\" : "/";
-  
-  for (let i = 0; i < toPublish.length; i++) {
-    const pkg = toPublish[i]!;
-    const folderName = basename(pkg.path);
-    const publishPath = `.publish${pathSep}${folderName}`;
-    console.log(`  ${i + 1}. cd ${publishPath} && npm publish --access public`);
-  }
-
-  console.log("\n");
-  warn("Note: Each publish will open a browser for OTP verification.");
-  console.log("");
-  
-  log("After publishing all packages, clean up with:");
+  console.log("Run the following command to publish:\n");
   if (isWindows) {
-    console.log("  rmdir /s /q .publish\n");
+    console.log(`  powershell -ExecutionPolicy Bypass -File ".publish\\publish.ps1"\n`);
   } else {
-    console.log("  rm -rf .publish\n");
+    console.log(`  bash .publish/publish.sh\n`);
   }
+  
+  warn("Each publish may open a browser for OTP verification.\n");
+  
+  log("After publishing, clean up with:");
+  console.log(isWindows ? "  rmdir /s /q .publish\n" : "  rm -rf .publish\n");
 }
 
 main().catch((e) => {
