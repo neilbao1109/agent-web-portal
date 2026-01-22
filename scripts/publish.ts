@@ -1,26 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Automated publish script for @agent-web-portal packages
+ * Publish preparation script for @agent-web-portal packages
  *
  * Features:
  * - Lists all publishable packages
  * - Compares versions with npm registry
- * - Publishes in topological order (dependencies first)
- * - Copies to temp folder to avoid modifying workspace:* dependencies
- * - Interactive OTP prompt for 2FA
+ * - Prepares packages in .publish folder (replaces workspace:* with real versions)
+ * - Shows publish order and commands
  *
  * Usage:
- *   bun run scripts/publish.ts [--dry-run] [--force]
+ *   bun run scripts/publish.ts
  *
- * Options:
- *   --dry-run      Show what would be published without actually publishing
- *   --force        Publish even if version already exists on npm
+ * After running, manually publish each package in order:
+ *   cd .publish/core && npm publish --access public
+ *   cd .publish/auth && npm publish --access public
+ *   ...
  */
 
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import * as readline from "node:readline";
 
 // =============================================================================
 // Types
@@ -79,20 +78,6 @@ function error(message: string) {
   console.error(`\x1b[31m✗\x1b[0m ${message}`);
 }
 
-function prompt(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
-
 function exec(command: string, options: { cwd?: string; silent?: boolean } = {}): string {
   try {
     const result = execSync(command, {
@@ -101,9 +86,13 @@ function exec(command: string, options: { cwd?: string; silent?: boolean } = {})
       stdio: options.silent ? "pipe" : "inherit",
     });
     return result?.toString().trim() ?? "";
-  } catch (e) {
+  } catch (e: any) {
     if (options.silent) {
-      return "";
+      // Re-throw with stderr content for silent mode
+      const stderr = e?.stderr?.toString() || e?.stdout?.toString() || e?.message || "";
+      const err = new Error(stderr);
+      (err as any).originalError = e;
+      throw err;
     }
     throw e;
   }
@@ -300,75 +289,16 @@ function preparePublishDir(pkg: PackageInfo, allPackages: PackageInfo[]): string
 }
 
 // =============================================================================
-// Publish
-// =============================================================================
-
-async function publishPackage(publishPath: string, dryRun: boolean): Promise<boolean> {
-  const pkgJson: PackageJson = JSON.parse(
-    readFileSync(join(publishPath, "package.json"), "utf-8")
-  );
-
-  log(`Publishing ${pkgJson.name}@${pkgJson.version}...`);
-
-  if (dryRun) {
-    try {
-      exec("npm publish --dry-run", { cwd: publishPath });
-      success(`Published ${pkgJson.name}@${pkgJson.version} (dry-run)`);
-      return true;
-    } catch (e) {
-      error(`Failed to publish ${pkgJson.name}: ${e}`);
-      return false;
-    }
-  }
-
-  // Try without OTP first, then prompt if needed
-  try {
-    exec("npm publish --access public", { cwd: publishPath, silent: true });
-    success(`Published ${pkgJson.name}@${pkgJson.version}`);
-    return true;
-  } catch (e: any) {
-    const errorMsg = e?.message || e?.toString() || "";
-    
-    // Check if OTP is required
-    if (errorMsg.includes("EOTP") || errorMsg.includes("one-time password")) {
-      const otp = await prompt(`\x1b[33m🔐 Enter OTP for ${pkgJson.name}: \x1b[0m`);
-      
-      if (!otp) {
-        error("No OTP provided, skipping package");
-        return false;
-      }
-
-      try {
-        exec(`npm publish --access public --otp=${otp}`, { cwd: publishPath });
-        success(`Published ${pkgJson.name}@${pkgJson.version}`);
-        return true;
-      } catch (e2) {
-        error(`Failed to publish ${pkgJson.name}: ${e2}`);
-        return false;
-      }
-    }
-
-    error(`Failed to publish ${pkgJson.name}: ${e}`);
-    return false;
-  }
-}
-
-// =============================================================================
 // Main
 // =============================================================================
 
 async function main() {
   const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run");
   const force = args.includes("--force");
 
   console.log("\n");
-  log("Agent Web Portal Package Publisher");
-  log("===================================\n");
-
-  if (dryRun) {
-    warn("DRY RUN MODE - No packages will actually be published\n");
-  }
+  log("Agent Web Portal Publish Preparation");
+  log("=====================================\n");
 
   // Discover packages
   log("Discovering packages...");
@@ -390,11 +320,11 @@ async function main() {
     : sorted.filter((p) => versions.get(p.name)?.needsPublish);
 
   if (toPublish.length === 0) {
-    success("All packages are up to date. Nothing to publish.\n");
+    success("All packages are up to date. Nothing to prepare.\n");
     return;
   }
 
-  log(`Will publish ${toPublish.length} package(s): ${toPublish.map((p) => basename(p.path)).join(", ")}\n`);
+  log(`Will prepare ${toPublish.length} package(s): ${toPublish.map((p) => basename(p.path)).join(", ")}\n`);
 
   // Prepare publish directory
   log(`Preparing publish directory: ${PUBLISH_DIR}`);
@@ -403,46 +333,36 @@ async function main() {
   }
   mkdirSync(PUBLISH_DIR, { recursive: true });
 
-  // Prepare and publish each package
-  let published = 0;
-  let failed = 0;
+  // Prepare each package
+  const preparedPaths: string[] = [];
 
   for (const pkg of toPublish) {
-    console.log("");
     log(`Preparing ${pkg.name}...`);
     const publishPath = preparePublishDir(pkg, sorted);
-
-    if (await publishPackage(publishPath, dryRun)) {
-      published++;
-    } else {
-      failed++;
-      if (!force) {
-        error("Stopping due to publish failure. Use --force to continue on error.");
-        break;
-      }
-    }
+    preparedPaths.push(publishPath);
+    success(`Prepared: ${publishPath}`);
   }
 
-  // Summary
+  // Print manual publish instructions
   console.log("\n");
-  log("Summary");
-  log("-------");
-  success(`Published: ${published}`);
-  if (failed > 0) {
-    error(`Failed: ${failed}`);
-  }
-  log(`Skipped: ${sorted.length - toPublish.length}`);
-
-  // Cleanup
-  if (!dryRun && existsSync(PUBLISH_DIR)) {
-    log("\nCleaning up...");
-    rmSync(PUBLISH_DIR, { recursive: true });
+  log("Preparation Complete!");
+  log("=====================\n");
+  
+  console.log("Packages are ready in .publish/ folder.");
+  console.log("Please publish them manually in this order:\n");
+  
+  for (let i = 0; i < toPublish.length; i++) {
+    const pkg = toPublish[i]!;
+    const folderName = basename(pkg.path);
+    console.log(`  ${i + 1}. cd .publish/${folderName} && npm publish --access public`);
   }
 
+  console.log("\n");
+  warn("Note: Each publish will open a browser for OTP verification.");
   console.log("");
-  if (failed > 0) {
-    process.exit(1);
-  }
+  
+  log("After publishing all packages, clean up with:");
+  console.log("  rm -rf .publish\n");
 }
 
 main().catch((e) => {
