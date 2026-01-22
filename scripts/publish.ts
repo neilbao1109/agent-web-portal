@@ -7,18 +7,20 @@
  * - Compares versions with npm registry
  * - Publishes in topological order (dependencies first)
  * - Copies to temp folder to avoid modifying workspace:* dependencies
+ * - Interactive OTP prompt for 2FA
  *
  * Usage:
  *   bun run scripts/publish.ts [--dry-run] [--force]
  *
  * Options:
- *   --dry-run  Show what would be published without actually publishing
- *   --force    Publish even if version already exists on npm
+ *   --dry-run      Show what would be published without actually publishing
+ *   --force        Publish even if version already exists on npm
  */
 
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import * as readline from "node:readline";
 
 // =============================================================================
 // Types
@@ -75,6 +77,20 @@ function warn(message: string) {
 
 function error(message: string) {
   console.error(`\x1b[31m✗\x1b[0m ${message}`);
+}
+
+function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
 }
 
 function exec(command: string, options: { cwd?: string; silent?: boolean } = {}): string {
@@ -287,19 +303,51 @@ function preparePublishDir(pkg: PackageInfo, allPackages: PackageInfo[]): string
 // Publish
 // =============================================================================
 
-function publishPackage(publishPath: string, dryRun: boolean): boolean {
+async function publishPackage(publishPath: string, dryRun: boolean): Promise<boolean> {
   const pkgJson: PackageJson = JSON.parse(
     readFileSync(join(publishPath, "package.json"), "utf-8")
   );
 
   log(`Publishing ${pkgJson.name}@${pkgJson.version}...`);
 
+  if (dryRun) {
+    try {
+      exec("npm publish --dry-run", { cwd: publishPath });
+      success(`Published ${pkgJson.name}@${pkgJson.version} (dry-run)`);
+      return true;
+    } catch (e) {
+      error(`Failed to publish ${pkgJson.name}: ${e}`);
+      return false;
+    }
+  }
+
+  // Try without OTP first, then prompt if needed
   try {
-    const command = dryRun ? "npm publish --dry-run" : "npm publish --access public";
-    exec(command, { cwd: publishPath });
+    exec("npm publish --access public", { cwd: publishPath, silent: true });
     success(`Published ${pkgJson.name}@${pkgJson.version}`);
     return true;
-  } catch (e) {
+  } catch (e: any) {
+    const errorMsg = e?.message || e?.toString() || "";
+    
+    // Check if OTP is required
+    if (errorMsg.includes("EOTP") || errorMsg.includes("one-time password")) {
+      const otp = await prompt(`\x1b[33m🔐 Enter OTP for ${pkgJson.name}: \x1b[0m`);
+      
+      if (!otp) {
+        error("No OTP provided, skipping package");
+        return false;
+      }
+
+      try {
+        exec(`npm publish --access public --otp=${otp}`, { cwd: publishPath });
+        success(`Published ${pkgJson.name}@${pkgJson.version}`);
+        return true;
+      } catch (e2) {
+        error(`Failed to publish ${pkgJson.name}: ${e2}`);
+        return false;
+      }
+    }
+
     error(`Failed to publish ${pkgJson.name}: ${e}`);
     return false;
   }
@@ -364,7 +412,7 @@ async function main() {
     log(`Preparing ${pkg.name}...`);
     const publishPath = preparePublishDir(pkg, sorted);
 
-    if (publishPackage(publishPath, dryRun)) {
+    if (await publishPackage(publishPath, dryRun)) {
       published++;
     } else {
       failed++;
