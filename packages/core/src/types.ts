@@ -47,9 +47,26 @@ export type SkillsListResponse = Record<
 // ============================================================================
 
 /**
- * Tool handler function type
+ * Tool handler context with blob presigned URLs
  */
-export type ToolHandler<TInput = unknown, TOutput = unknown> = (input: TInput) => Promise<TOutput>;
+export interface ToolHandlerBlobContext {
+  /** Blob presigned URLs */
+  blobs: {
+    /** Presigned GET URLs for input blobs */
+    input: Record<string, string>;
+    /** Presigned PUT URLs for output blobs */
+    output: Record<string, string>;
+  };
+}
+
+/**
+ * Tool handler function type
+ * The context parameter is optional for backward compatibility
+ */
+export type ToolHandler<TInput = unknown, TOutput = unknown> = (
+  input: TInput,
+  context?: ToolHandlerBlobContext
+) => Promise<TOutput>;
 
 /**
  * Tool definition with schemas and handler
@@ -226,8 +243,8 @@ export interface AgentWebPortalInstance {
   listTools(): McpToolsListResponse;
   /** Get the list of registered skills with frontmatter */
   listSkills(): SkillsListResponse;
-  /** Invoke a tool by name */
-  invokeTool(name: string, args: unknown): Promise<unknown>;
+  /** Invoke a tool by name with optional blob context */
+  invokeTool(name: string, args: unknown, blobContext?: BlobContext): Promise<unknown>;
 }
 
 // ============================================================================
@@ -253,4 +270,58 @@ export class ToolValidationError extends Error {
     super(`Tool "${toolName}" validation error: ${message}`);
     this.name = "ToolValidationError";
   }
+}
+
+export class BlobContextError extends Error {
+  constructor(toolName: string, message: string) {
+    super(`Tool "${toolName}" blob context error: ${message}`);
+    this.name = "BlobContextError";
+  }
+}
+
+// ============================================================================
+// Blob Types
+// ============================================================================
+
+/**
+ * Blob context passed in tool call requests
+ * This is provided by the Client SDK and contains presigned URLs
+ */
+export interface BlobContext {
+  /** Presigned GET URLs for input blob fields */
+  input: Record<string, string>;
+  /** Presigned PUT URLs for output blob fields */
+  output: Record<string, string>;
+  /** Permanent URIs for output blob fields (e.g., s3://bucket/key) */
+  outputUri: Record<string, string>;
+}
+
+/**
+ * Extended MCP tools/call request params with blob support
+ */
+export interface McpToolsCallParamsWithBlob extends McpToolsCallParams {
+  /** Blob context with presigned URLs (provided by Client SDK) */
+  _blobContext?: BlobContext;
+}
+
+/**
+ * Blob metadata for a single field
+ */
+export interface BlobFieldMetadata {
+  /** Expected MIME type */
+  mimeType?: string;
+  /** Maximum size in bytes */
+  maxSize?: number;
+  /** Field description */
+  description?: string;
+}
+
+/**
+ * Tool blob metadata extracted from schemas
+ */
+export interface ToolBlobMetadata {
+  /** Input blob fields with their metadata */
+  input: Record<string, BlobFieldMetadata>;
+  /** Output blob fields with their metadata */
+  output: Record<string, BlobFieldMetadata>;
 }

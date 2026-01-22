@@ -39,15 +39,41 @@ export {
   type AgentWebPortalOptions,
   createAgentWebPortal,
 } from "./src/agent-web-portal.ts";
+// Blob exports
+export {
+  AWP_BLOB_MARKER,
+  type BlobMetadata,
+  type BlobOptions,
+  type BlobSchema,
+  blob,
+  extractBlobFields,
+  extractToolBlobInfo,
+  getBlobMetadata,
+  isBlob,
+  type ToolBlobInfo,
+} from "./src/blob.ts";
+// Define tool exports
+export {
+  createEmptyBlobContext,
+  type DefinedTool,
+  type DefineToolOptions,
+  defineTool,
+  hasBlobs,
+  type ToolHandlerContext,
+  type ToolHandlerWithContext,
+} from "./src/define-tool.ts";
 export type { ParsedToolReference } from "./src/skill-registry.ts";
 export { SkillRegistry } from "./src/skill-registry.ts";
-
 // Registry exports (for advanced usage)
 export { ToolRegistry } from "./src/tool-registry.ts";
+
 // Type exports
 export type {
   // Instance type
   AgentWebPortalInstance,
+  // Blob types
+  BlobContext,
+  BlobFieldMetadata,
   // HTTP types
   HttpRequest,
   HttpResponseOptions,
@@ -58,6 +84,7 @@ export type {
   JsonRpcSuccessResponse,
   McpToolSchema,
   McpToolsCallParams,
+  McpToolsCallParamsWithBlob,
   McpToolsCallResponse,
   McpToolsListResponse,
   SkillDefinition,
@@ -66,13 +93,17 @@ export type {
   SkillRegistrationOptions,
   SkillsListResponse,
   SkillsMap,
+  ToolBlobMetadata,
   ToolDefinition,
   // Tool types
   ToolHandler,
+  ToolHandlerBlobContext,
   ToolRegistrationOptions,
 } from "./src/types.ts";
+
 // Error exports
 export {
+  BlobContextError,
   SkillValidationError,
   ToolNotFoundError,
   ToolValidationError,

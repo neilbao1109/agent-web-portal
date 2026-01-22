@@ -1,5 +1,6 @@
 import type {
   AgentWebPortalInstance,
+  BlobContext,
   HttpRequest,
   JsonRpcErrorResponse,
   JsonRpcRequest,
@@ -7,7 +8,7 @@ import type {
   JsonRpcSuccessResponse,
   McpToolsCallResponse,
 } from "./types.ts";
-import { ToolNotFoundError, ToolValidationError } from "./types.ts";
+import { BlobContextError, ToolNotFoundError, ToolValidationError } from "./types.ts";
 
 // JSON-RPC Error Codes
 const JSONRPC_PARSE_ERROR = -32700;
@@ -206,8 +207,11 @@ async function handleToolsCall(
   const name = params.name;
   const args = params.arguments as Record<string, unknown> | undefined;
 
+  // Extract blob context if present (AWP extension)
+  const blobContext = params._blobContext as BlobContext | undefined;
+
   try {
-    const result = await portal.invokeTool(name, args ?? {});
+    const result = await portal.invokeTool(name, args ?? {}, blobContext);
 
     const response: McpToolsCallResponse = {
       content: [
@@ -224,7 +228,7 @@ async function handleToolsCall(
       return errorResponse(id, JSONRPC_INVALID_PARAMS, error.message);
     }
 
-    if (error instanceof ToolValidationError) {
+    if (error instanceof ToolValidationError || error instanceof BlobContextError) {
       const response: McpToolsCallResponse = {
         content: [{ type: "text", text: error.message }],
         isError: true,

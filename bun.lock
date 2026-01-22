@@ -63,6 +63,28 @@
         "typescript": "^5",
       },
     },
+    "packages/client": {
+      "name": "@agent-web-portal/client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agent-web-portal/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@aws-sdk/client-s3": "^3.600.0",
+        "@aws-sdk/s3-request-presigner": "^3.600.0",
+        "@types/bun": "latest",
+        "bun-types": "^1.3.6",
+      },
+      "peerDependencies": {
+        "@aws-sdk/client-s3": "^3.0.0",
+        "@aws-sdk/s3-request-presigner": "^3.0.0",
+        "typescript": "^5",
+      },
+      "optionalPeers": [
+        "@aws-sdk/client-s3",
+        "@aws-sdk/s3-request-presigner",
+      ],
+    },
     "packages/core": {
       "name": "@agent-web-portal/core",
       "version": "0.1.0",
@@ -110,6 +132,8 @@
     "@agent-web-portal/aws-cli": ["@agent-web-portal/aws-cli@workspace:packages/aws-cli"],
 
     "@agent-web-portal/aws-lambda": ["@agent-web-portal/aws-lambda@workspace:packages/aws-lambda"],
+
+    "@agent-web-portal/client": ["@agent-web-portal/client@workspace:packages/client"],
 
     "@agent-web-portal/core": ["@agent-web-portal/core@workspace:packages/core"],
 

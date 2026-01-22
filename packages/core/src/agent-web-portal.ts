@@ -5,6 +5,7 @@ import { ToolRegistry } from "./tool-registry.ts";
 import type {
   AgentWebPortalConfig,
   AgentWebPortalInstance,
+  BlobContext,
   HttpRequest,
   McpToolsListResponse,
   SkillRegistrationOptions,
@@ -183,10 +184,17 @@ class AgentWebPortalInstanceImpl implements AgentWebPortalInstance {
   }
 
   /**
-   * Invoke a tool by name
+   * Invoke a tool by name with optional blob context
    */
-  async invokeTool(name: string, args: unknown): Promise<unknown> {
-    return this.toolRegistry.invokeTool(name, args);
+  async invokeTool(name: string, args: unknown, blobContext?: BlobContext): Promise<unknown> {
+    return this.toolRegistry.invokeTool(name, args, blobContext);
+  }
+
+  /**
+   * Get blob field information for a tool
+   */
+  getToolBlobInfo(name: string): { inputBlobs: string[]; outputBlobs: string[] } | undefined {
+    return this.toolRegistry.getToolBlobInfo(name);
   }
 }
 

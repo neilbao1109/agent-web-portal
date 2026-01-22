@@ -1,4 +1,5 @@
 import type { ZodSchema } from "zod";
+import { AWP_BLOB_MARKER, type BlobMetadata } from "../blob.ts";
 
 /**
  * Convert a Zod schema to JSON Schema format
@@ -11,19 +12,46 @@ export function zodToJsonSchema(schema: ZodSchema): Record<string, unknown> {
     return { type: "object" };
   }
 
-  return parseZodDef(def);
+  return parseZodDef(def, schema);
 }
 
-function parseZodDef(def: any): Record<string, unknown> {
+/**
+ * Check if a schema has blob marker and return its metadata
+ */
+function getBlobMetadataFromSchema(schema: any): BlobMetadata | undefined {
+  if (schema && typeof schema === "object" && AWP_BLOB_MARKER in schema) {
+    return schema[AWP_BLOB_MARKER] as BlobMetadata;
+  }
+  return undefined;
+}
+
+function parseZodDef(def: any, originalSchema?: any): Record<string, unknown> {
   const typeName = def.typeName;
 
   switch (typeName) {
-    case "ZodString":
+    case "ZodString": {
+      // Check if this is a blob schema
+      const blobMetadata = originalSchema ? getBlobMetadataFromSchema(originalSchema) : undefined;
+
+      if (blobMetadata) {
+        // Return blob-specific JSON Schema with x-awp-blob extension
+        return {
+          type: "string",
+          format: "uri",
+          "x-awp-blob": {
+            ...(blobMetadata.mimeType && { mimeType: blobMetadata.mimeType }),
+            ...(blobMetadata.maxSize && { maxSize: blobMetadata.maxSize }),
+            ...(blobMetadata.description && { description: blobMetadata.description }),
+          },
+        };
+      }
+
       return {
         type: "string",
         ...(def.minLength !== null && { minLength: def.minLength }),
         ...(def.maxLength !== null && { maxLength: def.maxLength }),
       };
+    }
 
     case "ZodNumber":
       return {
@@ -53,7 +81,7 @@ function parseZodDef(def: any): Record<string, unknown> {
     case "ZodArray":
       return {
         type: "array",
-        items: parseZodDef(def.type._def),
+        items: parseZodDef(def.type._def, def.type),
       };
 
     case "ZodObject": {
@@ -62,7 +90,8 @@ function parseZodDef(def: any): Record<string, unknown> {
 
       const shape = def.shape();
       for (const [key, value] of Object.entries(shape)) {
-        properties[key] = parseZodDef((value as any)._def);
+        // Pass the original schema to detect blob markers
+        properties[key] = parseZodDef((value as any)._def, value);
 
         // Check if field is required (not optional)
         if ((value as any)._def.typeName !== "ZodOptional") {
@@ -78,10 +107,11 @@ function parseZodDef(def: any): Record<string, unknown> {
     }
 
     case "ZodOptional":
-      return parseZodDef(def.innerType._def);
+      // Pass through the inner type's original schema for blob detection
+      return parseZodDef(def.innerType._def, def.innerType);
 
     case "ZodNullable": {
-      const inner = parseZodDef(def.innerType._def);
+      const inner = parseZodDef(def.innerType._def, def.innerType);
       return {
         ...inner,
         nullable: true,
@@ -90,23 +120,23 @@ function parseZodDef(def: any): Record<string, unknown> {
 
     case "ZodDefault":
       return {
-        ...parseZodDef(def.innerType._def),
+        ...parseZodDef(def.innerType._def, def.innerType),
         default: def.defaultValue(),
       };
 
     case "ZodUnion": {
-      const options = def.options.map((opt: any) => parseZodDef(opt._def));
+      const options = def.options.map((opt: any) => parseZodDef(opt._def, opt));
       return { oneOf: options };
     }
 
     case "ZodRecord":
       return {
         type: "object",
-        additionalProperties: parseZodDef(def.valueType._def),
+        additionalProperties: parseZodDef(def.valueType._def, def.valueType),
       };
 
     case "ZodTuple": {
-      const items = def.items.map((item: any) => parseZodDef(item._def));
+      const items = def.items.map((item: any) => parseZodDef(item._def, item));
       return {
         type: "array",
         items,
@@ -126,16 +156,18 @@ function parseZodDef(def: any): Record<string, unknown> {
 
     case "ZodEffects":
       // For transformed schemas, use the inner schema
-      return parseZodDef(def.schema._def);
+      return parseZodDef(def.schema._def, def.schema);
 
     case "ZodIntersection": {
-      const left = parseZodDef(def.left._def);
-      const right = parseZodDef(def.right._def);
+      const left = parseZodDef(def.left._def, def.left);
+      const right = parseZodDef(def.right._def, def.right);
       return { allOf: [left, right] };
     }
 
     case "ZodDiscriminatedUnion": {
-      const options = Array.from(def.optionsMap.values()).map((opt: any) => parseZodDef(opt._def));
+      const options = Array.from(def.optionsMap.values()).map((opt: any) =>
+        parseZodDef(opt._def, opt)
+      );
       return {
         oneOf: options,
         discriminator: { propertyName: def.discriminator },
