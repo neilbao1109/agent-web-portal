@@ -91,7 +91,7 @@ export const handler = createAgentWebPortalHandler({
         // Compile the JSONata expression
         const expr = jsonata(expression);
 
-        // Evaluate with optional bindings
+        // Evaluate with optional bindings (input is already preprocessed by schema)
         const result = await expr.evaluate(input, bindings);
 
         return {
@@ -108,4 +108,7 @@ export const handler = createAgentWebPortalHandler({
     },
   })
   .withSkillsConfig(skillsConfig)
-  .build();
+  .build({
+    // Enable coercion for XML-based MCP clients that serialize all args as strings
+    coerceXmlClientArgs: true,
+  });

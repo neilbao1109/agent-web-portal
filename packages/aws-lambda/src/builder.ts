@@ -30,13 +30,30 @@ export type LambdaHandler = (
 ) => Promise<APIGatewayProxyResult>;
 
 /**
- * Options for creating a Lambda handler builder
+ * Options for creating a Lambda handler builder (intrinsic properties)
  */
 export interface LambdaHandlerBuilderOptions extends AgentWebPortalOptions {
   /** S3 client region (defaults to AWS_REGION env) */
   region?: string;
   /** Presigned URL expiration in seconds (default: 3600) */
   presignedUrlExpiration?: number;
+}
+
+/**
+ * Options for build() - runtime behavior configuration
+ */
+export interface LambdaHandlerBuildOptions {
+  /**
+   * Enable automatic coercion of stringified arguments for XML-based MCP clients.
+   *
+   * Some MCP clients (like those using XML as a carrier format) serialize all
+   * tool arguments as strings. When enabled, if argument validation fails,
+   * the portal will attempt to parse each string argument as JSON and retry
+   * validation.
+   *
+   * @default false
+   */
+  coerceXmlClientArgs?: boolean;
 }
 
 /**
@@ -150,9 +167,10 @@ export class LambdaHandlerBuilder {
    *
    * Creates the Agent Web Portal instance and wraps it in a Lambda handler.
    *
+   * @param buildOptions - Runtime behavior configuration
    * @returns Lambda handler function
    */
-  build(): LambdaHandler {
+  build(buildOptions: LambdaHandlerBuildOptions = {}): LambdaHandler {
     // Build the portal
     const builder = createAgentWebPortal(this.portalOptions);
 
@@ -166,7 +184,10 @@ export class LambdaHandlerBuilder {
       builder.registerSkills(this.skills);
     }
 
-    const portal = builder.build();
+    // Build with runtime options
+    const portal = builder.build({
+      coerceXmlClientArgs: buildOptions.coerceXmlClientArgs ?? false,
+    });
 
     // Create and return the Lambda handler
     return createLambdaHandler(portal, {

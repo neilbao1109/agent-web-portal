@@ -15,9 +15,10 @@
     "clean": "rm -rf dist .aws-sam",
     "build": "rm -rf dist && bun build src/handler.ts --outfile dist/handler.mjs --target node --format esm --minify --external \"@aws-sdk/*\"",
     "sam:build": "bun run build && sam build",
-    "sam:local": "bun run build && sam local start-api",
-    "sam:invoke": "bun run build && sam local invoke JsonataPortalFunction",
-    "sam:deploy": "bun run build && sam deploy --guided"
+    "sam:local": "bun run sam:build && sam local start-api",
+    "sam:invoke": "bun run sam:build && sam local invoke JsonataPortalFunction",
+    "sam:deploy": "bun run sam:build && sam deploy",
+    "sam:deploy:guided": "bun run sam:build && sam deploy --guided"
   },
   "dependencies": {
     "@agent-web-portal/aws-lambda": "workspace:*",

@@ -3,6 +3,7 @@ import { createHttpHandler } from "./http-handler.ts";
 import { SkillRegistry } from "./skill-registry.ts";
 import { ToolRegistry } from "./tool-registry.ts";
 import type {
+  AgentWebPortalConfig,
   AgentWebPortalInstance,
   HttpRequest,
   McpToolsListResponse,
@@ -12,7 +13,7 @@ import type {
 } from "./types.ts";
 
 /**
- * AgentWebPortal Builder Options
+ * AgentWebPortal Builder Options (intrinsic properties)
  */
 export interface AgentWebPortalOptions {
   /** Server name for MCP protocol */
@@ -22,6 +23,11 @@ export interface AgentWebPortalOptions {
   /** Server description */
   description?: string;
 }
+
+/**
+ * Options for build() - runtime behavior configuration
+ */
+export interface AgentWebPortalBuildOptions extends AgentWebPortalConfig {}
 
 /**
  * AgentWebPortal Builder
@@ -107,12 +113,18 @@ export class AgentWebPortalBuilder {
    * Validates all skills against registered tools and creates
    * the final instance with HTTP handler.
    *
+   * @param buildOptions - Runtime behavior configuration
    * @throws SkillValidationError if any skill references missing tools
    * @returns AgentWebPortalInstance
    */
-  build(): AgentWebPortalInstance {
+  build(buildOptions: AgentWebPortalBuildOptions = {}): AgentWebPortalInstance {
     // Validate all skills against registered tools
     this.skillRegistry.validateSkills(this.toolRegistry);
+
+    // Apply runtime configuration to tool registry
+    this.toolRegistry.setConfig({
+      coerceXmlClientArgs: buildOptions.coerceXmlClientArgs ?? false,
+    });
 
     // Create the instance
     return new AgentWebPortalInstanceImpl(this.options, this.toolRegistry, this.skillRegistry);

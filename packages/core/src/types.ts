@@ -192,6 +192,27 @@ export interface HttpResponseOptions {
 }
 
 // ============================================================================
+// AgentWebPortal Configuration Types
+// ============================================================================
+
+/**
+ * Options for AgentWebPortal behavior
+ */
+export interface AgentWebPortalConfig {
+  /**
+   * Enable automatic coercion of stringified arguments for XML-based MCP clients.
+   *
+   * Some MCP clients (like those using XML as a carrier format) serialize all
+   * tool arguments as strings. When enabled, if argument validation fails,
+   * the portal will attempt to parse each string argument as JSON and retry
+   * validation.
+   *
+   * @default false
+   */
+  coerceXmlClientArgs?: boolean;
+}
+
+// ============================================================================
 // AgentWebPortal Instance Types
 // ============================================================================
 
