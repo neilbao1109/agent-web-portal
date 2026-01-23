@@ -2,14 +2,28 @@
  * Agent Web Portal Client SDK
  *
  * Provides a client for interacting with AWP servers, with automatic
- * blob handling through presigned URLs.
+ * blob handling through presigned URLs and keypair-based authentication.
  *
  * @example
  * ```typescript
- * import { AwpClient, S3StorageProvider } from "@agent-web-portal/client";
+ * import { AwpClient, AwpAuth, FileKeyStorage, S3StorageProvider } from "@agent-web-portal/client";
+ *
+ * // Create auth handler
+ * const auth = new AwpAuth({
+ *   clientName: "My AI Agent",
+ *   keyStorage: new FileKeyStorage({ directory: "~/.awp/keys" }),
+ *   callbacks: {
+ *     onAuthRequired: async (challenge) => {
+ *       console.log("Visit:", challenge.authUrl);
+ *       console.log("Code:", challenge.verificationCode);
+ *       return true;
+ *     },
+ *   },
+ * });
  *
  * const client = new AwpClient({
  *   endpoint: "https://my-awp-server.com",
+ *   auth,
  *   storage: new S3StorageProvider({
  *     region: "us-east-1",
  *     bucket: "my-bucket",
@@ -26,6 +40,28 @@
  * ```
  */
 
+// Auth exports
+export {
+  // Types
+  type AuthCallbacks,
+  type AuthChallenge,
+  type AuthChallengeResponse,
+  AwpAuth,
+  AwpAuthError,
+  type AwpAuthOptions,
+  type AwpKeyPair,
+  // Key storage implementations
+  FileKeyStorage,
+  // Crypto utilities
+  generateKeyPair,
+  generateNonce,
+  type KeyStorage,
+  LocalStorageKeyStorage,
+  MemoryKeyStorage,
+  type SignedHeaders,
+  type StoredKeyData,
+  signRequest,
+} from "./auth/index.ts";
 // Blob interceptor exports
 export {
   BlobInterceptor,

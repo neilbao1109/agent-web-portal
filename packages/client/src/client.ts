@@ -6,6 +6,7 @@
  */
 
 import type { BlobContext, McpToolSchema, McpToolsListResponse } from "@agent-web-portal/core";
+import type { AuthChallengeResponse, AwpAuth } from "./auth/index.ts";
 import { BlobInterceptor, type ToolBlobSchema } from "./blob-interceptor.ts";
 import type { StorageProvider } from "./storage/types.ts";
 
@@ -15,8 +16,10 @@ import type { StorageProvider } from "./storage/types.ts";
 export interface AwpClientOptions {
   /** The endpoint URL of the AWP server */
   endpoint: string;
-  /** Storage provider for blob handling */
-  storage: StorageProvider;
+  /** Storage provider for blob handling (optional if no blob tools are used) */
+  storage?: StorageProvider;
+  /** Auth handler for authentication (optional) */
+  auth?: AwpAuth;
   /** Default prefix for output blobs */
   outputPrefix?: string;
   /** Custom fetch function (for testing or custom HTTP handling) */
@@ -76,8 +79,9 @@ interface CachedToolSchema {
  */
 export class AwpClient {
   private endpoint: string;
-  private storage: StorageProvider;
-  private blobInterceptor: BlobInterceptor;
+  private storage: StorageProvider | null;
+  private auth: AwpAuth | null;
+  private blobInterceptor: BlobInterceptor | null;
   private fetchFn: typeof fetch;
   private headers: Record<string, string>;
   private toolSchemaCache: Map<string, CachedToolSchema> = new Map();
@@ -86,14 +90,18 @@ export class AwpClient {
 
   constructor(options: AwpClientOptions) {
     this.endpoint = options.endpoint.replace(/\/$/, ""); // Remove trailing slash
-    this.storage = options.storage;
+    this.storage = options.storage ?? null;
+    this.auth = options.auth ?? null;
     this.fetchFn = options.fetch ?? fetch;
     this.headers = options.headers ?? {};
 
-    this.blobInterceptor = new BlobInterceptor({
-      storage: options.storage,
-      outputPrefix: options.outputPrefix,
-    });
+    // Only create blob interceptor if storage is provided
+    this.blobInterceptor = options.storage
+      ? new BlobInterceptor({
+          storage: options.storage,
+          outputPrefix: options.outputPrefix,
+        })
+      : null;
   }
 
   /**
@@ -101,20 +109,57 @@ export class AwpClient {
    */
   private async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
     const id = ++this.requestId;
-
-    const response = await this.fetchFn(this.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...this.headers,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method,
-        params,
-      }),
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method,
+      params,
     });
+
+    // Get auth headers if auth is configured
+    let authHeaders: Record<string, string> = {};
+    if (this.auth && (await this.auth.hasValidKey(this.endpoint))) {
+      authHeaders = await this.auth.sign(this.endpoint, "POST", this.endpoint, body);
+    }
+
+    const doRequest = async (): Promise<Response> => {
+      return this.fetchFn(this.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.headers,
+          ...authHeaders,
+        },
+        body,
+      });
+    };
+
+    let response = await doRequest();
+
+    // Handle 401 with auth flow
+    if (response.status === 401 && this.auth) {
+      const responseBody = (await response
+        .json()
+        .catch(() => null)) as AuthChallengeResponse | null;
+
+      if (responseBody?.auth_endpoint) {
+        // Start authorization flow
+        const shouldRetry = await this.auth.handleUnauthorized(this.endpoint, responseBody);
+
+        if (shouldRetry) {
+          // User completed authorization, retry with new key
+          authHeaders = await this.auth.sign(this.endpoint, "POST", this.endpoint, body);
+          response = await doRequest();
+
+          if (response.ok) {
+            this.auth.notifyAuthSuccess(this.endpoint);
+          } else if (response.status === 401) {
+            const error = new Error("Authorization failed - verification code may be incorrect");
+            this.auth.notifyAuthFailed(this.endpoint, error);
+          }
+        }
+      }
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
@@ -233,8 +278,9 @@ export class AwpClient {
 
     let blobContext: BlobContext | undefined;
 
-    // Prepare blob context if there are blob fields
+    // Prepare blob context if there are blob fields and blob interceptor is available
     if (
+      this.blobInterceptor &&
       effectiveBlobSchema &&
       (effectiveBlobSchema.inputBlobs.length > 0 || effectiveBlobSchema.outputBlobs.length > 0)
     ) {
