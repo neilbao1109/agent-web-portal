@@ -86,15 +86,39 @@ Client                         AWP Server                    Storage (S3)
   │  <─────────────────────────────│                              │
 ```
 
-### 2.3 Auth 协商机制
+### 2.3 Auth Discovery 机制
 
-AWP 提供灵活的认证机制，支持：
+AWP 提供基于 RFC 9728 的认证发现机制，让 Client 能够自动发现和选择合适的认证方式。
 
-- **OAuth 2.0** (RFC 9728 Protected Resource Metadata)
-- **HMAC Signature** (适用于微服务间通信)
-- **API Key** (简单静态密钥)
+**发现流程**：
 
-401 响应会返回所有支持的认证方案，让 Client 选择：
+```
+Client                              AWP Server
+  │                                     │
+  │  1. 首次请求 (无认证)                │
+  │  ──────────────────────────────────>│
+  │                                     │
+  │  2. 401 + WWW-Authenticate headers  │
+  │     + supported_schemes body        │
+  │  <──────────────────────────────────│
+  │                                     │
+  │  3. 获取 well-known 端点 (可选)     │
+  │  GET /.well-known/oauth-protected-resource
+  │  ──────────────────────────────────>│
+  │  <──────────────────────────────────│
+  │                                     │
+  │  4. 携带认证凭据重新请求             │
+  │  ──────────────────────────────────>│
+  │                                     │
+```
+
+**支持的认证方案**：
+
+- **OAuth 2.0** - RFC 9728 Protected Resource Metadata，适用于公开 API
+- **HMAC Signature** - 基于共享密钥的签名认证，适用于微服务间通信
+- **API Key** - 简单静态密钥，适用于快速集成
+
+**401 Challenge Response 示例**：
 
 ```json
 {
@@ -106,6 +130,8 @@ AWP 提供灵活的认证机制，支持：
   ]
 }
 ```
+
+Client 可以根据 `supported_schemes` 选择合适的认证方式，无需预先配置。
 
 ### 2.4 暂不支持的 MCP 功能
 
@@ -490,7 +516,7 @@ const rewritten = registry.rewriteToolReferences(markdown, new Map([
 
 ---
 
-## 7. Auth 协商机制
+## 7. Auth Discovery 机制
 
 ### 7.1 支持的认证方式
 
