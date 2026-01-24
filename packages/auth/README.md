@@ -116,13 +116,99 @@ Bun.serve({
 ## Well-Known 端点
 
 ```typescript
-import { handleWellKnown } from "@agent-web-portal/auth";
+import { handleWellKnown, WELL_KNOWN_PATHS } from "@agent-web-portal/auth";
 
 // 在路由中处理
-const wellKnownResponse = handleWellKnown(request, config);
-if (wellKnownResponse) {
-  return wellKnownResponse;
+if (url.pathname.includes("/.well-known/")) {
+  // 适配路径（如果使用前缀路由）
+  const modifiedUrl = new URL(req.url);
+  modifiedUrl.pathname = WELL_KNOWN_PATHS.OAUTH_PROTECTED_RESOURCE;
+  const modifiedReq = { ...req, url: modifiedUrl.toString() };
+  
+  const wellKnownResponse = handleWellKnown(modifiedReq, config);
+  if (wellKnownResponse) {
+    return wellKnownResponse;
+  }
 }
+```
+
+## 完整集成示例
+
+```typescript
+import { createAgentWebPortal } from "@agent-web-portal/core";
+import {
+  type AuthConfig,
+  type AuthHttpRequest,
+  createAuthMiddleware,
+  handleWellKnown,
+  WELL_KNOWN_PATHS,
+} from "@agent-web-portal/auth";
+
+// 配置认证
+const authConfig: AuthConfig = {
+  schemes: [
+    {
+      type: "oauth2",
+      resourceMetadata: {
+        resource: "https://api.example.com/mcp",
+        authorization_servers: ["https://auth.example.com"],
+        scopes_supported: ["read", "write"],
+      },
+      validateToken: async (token) => {
+        // 验证 JWT 或调用 Auth Server
+        const isValid = await verifyToken(token);
+        return isValid
+          ? { valid: true, claims: { sub: "user-id" } }
+          : { valid: false, error: "Invalid token" };
+      },
+    },
+    {
+      type: "api_key",
+      header: "X-API-Key",
+      validateKey: async (key) => {
+        const user = await db.findUserByApiKey(key);
+        return user
+          ? { valid: true, metadata: { userId: user.id } }
+          : { valid: false, error: "Invalid API key" };
+      },
+    },
+  ],
+  excludePaths: ["/health", "/.well-known/"],
+};
+
+const authMiddleware = createAuthMiddleware(authConfig);
+
+// 创建 Portal
+const portal = createAgentWebPortal({ name: "secure-portal" })
+  .registerTool("secure_action", { /* ... */ })
+  .build();
+
+// HTTP 处理
+Bun.serve({
+  port: 3000,
+  fetch: async (req) => {
+    const url = new URL(req.url);
+    const authReq = req as unknown as AuthHttpRequest;
+
+    // 1. 处理 well-known 端点
+    if (url.pathname.includes("/.well-known/")) {
+      const modifiedUrl = new URL(req.url);
+      modifiedUrl.pathname = WELL_KNOWN_PATHS.OAUTH_PROTECTED_RESOURCE;
+      const modifiedReq = { ...authReq, url: modifiedUrl.toString() };
+      const wellKnownResponse = handleWellKnown(modifiedReq, authConfig);
+      if (wellKnownResponse) return wellKnownResponse;
+    }
+
+    // 2. 执行认证
+    const authResult = await authMiddleware(authReq);
+    if (!authResult.authorized) {
+      return authResult.challengeResponse!;
+    }
+
+    // 3. 处理 Portal 请求
+    return portal.handleRequest(req);
+  },
+});
 ```
 
 ## API
@@ -139,6 +225,21 @@ if (wellKnownResponse) {
 
 检查请求是否包含认证凭据。
 
+## 测试
+
+E2E 测试位于 `packages/examples/e2e.test.ts`，覆盖：
+
+- **Well-Known 端点**：Protected Resource Metadata 返回
+- **401 Challenge**：未认证请求的响应格式
+- **认证流程**：Bearer token 和 API Key 验证
+- **路径排除**：well-known 和 health 端点不需要认证
+
+运行测试：
+
+```bash
+bun test packages/examples/e2e.test.ts
+```
+
 ## 类型导出
 
 - `AuthConfig` - 认证配置
@@ -146,6 +247,8 @@ if (wellKnownResponse) {
 - `AuthResult` - 认证结果
 - `AuthContext` - 认证上下文
 - `ProtectedResourceMetadata` - OAuth 资源元数据
+- `AuthHttpRequest` - HTTP 请求接口
+- `WELL_KNOWN_PATHS` - Well-known 端点路径常量
 
 ## License
 

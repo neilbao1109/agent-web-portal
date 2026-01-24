@@ -12,6 +12,8 @@ A scene-oriented, MCP-compatible framework that exposes site functionality to AI
 - 🔗 **Cross-MCP Support**: Reference tools from other MCP servers
 - ✅ **Build-time Validation**: Ensures all skill dependencies are satisfied
 - 🚀 **Bun/Node Ready**: Works with modern JavaScript runtimes
+- 🔐 **Flexible Auth**: OAuth 2.0 (RFC 9728), HMAC, API Key authentication
+- 📦 **Blob Handling**: Presigned URL-based binary data exchange
 
 ## Installation
 
@@ -240,6 +242,92 @@ frontmatter: {
 }
 ```
 
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| `@agent-web-portal/core` | Core framework: Portal, Tools, Skills, HTTP Handler |
+| `@agent-web-portal/auth` | Authentication middleware (OAuth 2.0, HMAC, API Key) |
+| `@agent-web-portal/client` | Client SDK with blob handling and auth support |
+| `@agent-web-portal/aws-lambda` | AWS Lambda adapter |
+| `@agent-web-portal/aws-cli` | CLI for deploying Skills |
+
+## Authentication
+
+AWP supports multiple authentication schemes:
+
+```typescript
+import { createAuthMiddleware } from "@agent-web-portal/auth";
+
+const auth = createAuthMiddleware({
+  schemes: [
+    {
+      type: "oauth2",
+      resourceMetadata: {
+        resource: "https://api.example.com/mcp",
+        authorization_servers: ["https://auth.example.com"],
+      },
+      validateToken: async (token) => {
+        // Validate JWT token
+        return { valid: true, claims: { sub: "user-123" } };
+      },
+    },
+    {
+      type: "api_key",
+      header: "X-API-Key",
+      validateKey: async (key) => ({
+        valid: key === process.env.API_KEY,
+      }),
+    },
+  ],
+});
+
+Bun.serve({
+  port: 3000,
+  fetch: async (req) => {
+    const result = await auth(req);
+    if (!result.authorized) {
+      return result.challengeResponse!;
+    }
+    return portal.handleRequest(req);
+  },
+});
+```
+
+## Blob Handling
+
+AWP supports binary data exchange via presigned URLs:
+
+```typescript
+import { blob, createAgentWebPortal } from "@agent-web-portal/core";
+import { z } from "zod";
+
+const portal = createAgentWebPortal({ name: "blob-portal" })
+  .registerTool("process_document", {
+    inputSchema: z.object({
+      document: blob({ mimeType: "application/pdf" }),
+      quality: z.number().min(1).max(100),
+    }),
+    outputSchema: z.object({
+      thumbnail: blob({ mimeType: "image/png" }),
+      pageCount: z.number(),
+    }),
+    handler: async ({ quality }, context) => {
+      // Access input blob via presigned GET URL
+      const pdfData = await fetch(context.blobs.input.document);
+      
+      // Write output blob via presigned PUT URL
+      await fetch(context.blobs.output.thumbnail, {
+        method: "PUT",
+        body: thumbnailData,
+      });
+      
+      return { pageCount: 10, thumbnail: "" };
+    },
+  })
+  .build();
+```
+
 ## Examples
 
 Run the examples:
@@ -250,6 +338,9 @@ bun run examples/basic.ts
 
 # Advanced example (multiple tools, cross-MCP references)
 bun run examples/advanced.ts
+
+# Run E2E tests (includes auth and blob handling)
+bun test packages/examples/e2e.test.ts
 ```
 
 ## Error Handling

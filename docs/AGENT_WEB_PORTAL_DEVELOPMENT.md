@@ -607,6 +607,129 @@ AWP 自动暴露 `/.well-known/oauth-protected-resource` 端点：
 }
 ```
 
+### 7.4 完整的 Auth Portal 示例
+
+以下是一个完整的带认证的 Portal 实现示例：
+
+```typescript
+import { createAgentWebPortal } from "@agent-web-portal/core";
+import {
+  type AuthConfig,
+  type AuthHttpRequest,
+  createAuthMiddleware,
+  handleWellKnown,
+  WELL_KNOWN_PATHS,
+} from "@agent-web-portal/auth";
+import { z } from "zod";
+
+// 定义认证配置
+const authConfig: AuthConfig = {
+  schemes: [
+    {
+      type: "oauth2",
+      resourceMetadata: {
+        resource: "https://api.example.com/auth",
+        authorization_servers: ["https://auth.example.com"],
+        scopes_supported: ["read", "write", "admin"],
+        bearer_methods_supported: ["header"],
+        resource_name: "Auth-Protected Portal",
+      },
+      validateToken: async (token) => {
+        // 验证 Bearer token
+        if (token === "valid-token") {
+          return { valid: true, claims: { sub: "user-123" } };
+        }
+        return { valid: false, error: "Invalid token" };
+      },
+    },
+    {
+      type: "api_key",
+      header: "X-API-Key",
+      validateKey: async (key) => {
+        if (key === "secret-api-key") {
+          return { valid: true, metadata: { apiKeyId: "key-1" } };
+        }
+        return { valid: false, error: "Invalid API key" };
+      },
+    },
+  ],
+  excludePaths: ["/health", "/.well-known/"],
+};
+
+// 创建认证中间件
+const authMiddleware = createAuthMiddleware(authConfig);
+
+// 创建 Portal
+const authPortal = createAgentWebPortal({
+  name: "auth-portal",
+  version: "1.0.0",
+})
+  .registerTool("secure_greet", {
+    inputSchema: z.object({ name: z.string() }),
+    outputSchema: z.object({ message: z.string(), authenticatedAs: z.string() }),
+    description: "A greeting that requires authentication",
+    handler: async ({ name }) => ({
+      message: `Hello, ${name}! (Authenticated)`,
+      authenticatedAs: "user-123",
+    }),
+  })
+  .build();
+
+// HTTP 处理函数
+async function handleAuthPortal(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const authReq = req as unknown as AuthHttpRequest;
+
+  // 处理 well-known 端点 (不需要认证)
+  if (url.pathname.includes("/.well-known/")) {
+    const modifiedUrl = new URL(req.url);
+    modifiedUrl.pathname = WELL_KNOWN_PATHS.OAUTH_PROTECTED_RESOURCE;
+    const modifiedReq = { ...authReq, url: modifiedUrl.toString() };
+    const wellKnownResponse = handleWellKnown(modifiedReq, authConfig);
+    if (wellKnownResponse) {
+      return wellKnownResponse;
+    }
+  }
+
+  // 执行认证
+  const authResult = await authMiddleware(authReq);
+  if (!authResult.authorized) {
+    return authResult.challengeResponse!;
+  }
+
+  // 认证成功，处理请求
+  return authPortal.handleRequest(req);
+}
+
+// 启动服务器
+Bun.serve({
+  port: 3000,
+  fetch: handleAuthPortal,
+});
+```
+
+### 7.5 认证测试
+
+E2E 测试覆盖以下场景：
+
+1. **Well-Known 端点测试**：
+   - 返回正确的 Protected Resource Metadata
+   - 包含正确的 Cache-Control 头
+
+2. **401 Challenge 响应测试**：
+   - 未认证请求返回 401
+   - 响应包含 WWW-Authenticate 头
+   - 响应体包含 supported_schemes
+
+3. **认证成功测试**：
+   - Bearer token 认证
+   - API Key 认证
+   - 认证后成功调用 Tool
+
+4. **路径排除测试**：
+   - well-known 端点不需要认证
+   - health 端点不需要认证
+
 ---
 
 ## 8. Blob 交换机制
