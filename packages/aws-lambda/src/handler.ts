@@ -6,7 +6,6 @@
  * - /skills/:skillName - Skill download endpoint (redirects to S3 presigned URL)
  * - /auth/init - Auth initiation endpoint
  * - /auth/status - Auth status polling endpoint
- * - /auth/complete - Auth completion endpoint
  */
 
 import { readFileSync } from "node:fs";
@@ -27,7 +26,6 @@ import type {
 // Default auth paths
 const DEFAULT_AUTH_INIT_PATH = "/auth/init";
 const DEFAULT_AUTH_STATUS_PATH = "/auth/status";
-const DEFAULT_AUTH_COMPLETE_PATH = "/auth/complete";
 const DEFAULT_AUTH_PAGE_PATH = "/auth";
 
 /**
@@ -197,7 +195,6 @@ async function handleAwpAuthRoutes(
 ): Promise<Response | null> {
   const authInitPath = config.authInitPath ?? DEFAULT_AUTH_INIT_PATH;
   const authStatusPath = config.authStatusPath ?? DEFAULT_AUTH_STATUS_PATH;
-  const authCompletePath = DEFAULT_AUTH_COMPLETE_PATH;
 
   // Import auth functions lazily to avoid circular dependencies
   const { handleAuthInit, handleAuthStatus } = await import("@agent-web-portal/auth");
@@ -220,51 +217,7 @@ async function handleAwpAuthRoutes(
     });
   }
 
-  // Handle /auth/complete
-  if (path === authCompletePath && request.method === "POST") {
-    return handleAuthComplete(request, config);
-  }
-
   return null;
-}
-
-/**
- * Handle auth completion endpoint
- */
-async function handleAuthComplete(
-  request: LambdaAuthRequest,
-  config: AwpAuthLambdaConfig
-): Promise<Response> {
-  // Get authenticated user from session
-  if (!config.getAuthenticatedUser) {
-    return new Response(
-      JSON.stringify({
-        error: "server_error",
-        error_description: "Auth completion not configured",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const user = await config.getAuthenticatedUser(request);
-  if (!user) {
-    return new Response(
-      JSON.stringify({
-        error: "unauthorized",
-        error_description: "User not authenticated",
-      }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // Import auth functions lazily
-  const { handleAuthComplete: authComplete } = await import("@agent-web-portal/auth");
-
-  return authComplete(request, user.userId, {
-    pendingAuthStore: config.pendingAuthStore,
-    pubkeyStore: config.pubkeyStore,
-    authorizationTTL: config.authorizationTTL,
-  });
 }
 
 /**

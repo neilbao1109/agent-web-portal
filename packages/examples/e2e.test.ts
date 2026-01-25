@@ -469,7 +469,8 @@ describe("AWP Auth Discovery (/auth)", () => {
   const authPath = "/auth";
   const authInitPath = "/auth/init";
   const authStatusPath = "/auth/status";
-  const authCompletePath = "/auth/complete";
+  const authLoginPath = "/auth/login";
+  const authPagePath = "/auth/page";
 
   // Test keypair for signing requests
   let testPublicKey: string;
@@ -562,8 +563,30 @@ describe("AWP Auth Discovery (/auth)", () => {
     });
   });
 
-  describe("Auth Complete Flow", () => {
-    test("completes auth with valid verification code", async () => {
+  describe("Auth Page", () => {
+    test("returns login page HTML", async () => {
+      const response = await fetch(`${BASE_URL}${authPagePath}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toContain("text/html");
+
+      const html = await response.text();
+      expect(html).toContain("Authorize Application");
+      expect(html).toContain("test / test123");
+    });
+
+    test("displays verification code from URL params", async () => {
+      const response = await fetch(`${BASE_URL}${authPagePath}?code=ABC-123&pubkey=test.key`);
+      expect(response.status).toBe(200);
+
+      const html = await response.text();
+      // The code is displayed via JavaScript, so we check the hidden input
+      expect(html).toContain('id="verification_code"');
+      expect(html).toContain('id="pubkey"');
+    });
+  });
+
+  describe("Auth Login Flow", () => {
+    test("completes auth with valid credentials and verification code", async () => {
       // Step 1: Init auth
       const initResponse = await fetch(`${BASE_URL}${authInitPath}`, {
         method: "POST",
@@ -576,17 +599,21 @@ describe("AWP Auth Discovery (/auth)", () => {
       const initResult = (await initResponse.json()) as any;
       const verificationCode = initResult.verification_code;
 
-      // Step 2: Complete auth (simulating user entering code)
-      const completeResponse = await fetch(`${BASE_URL}${authCompletePath}`, {
+      // Step 2: Login with test user credentials
+      const formData = new FormData();
+      formData.append("username", "test");
+      formData.append("password", "test123");
+      formData.append("verification_code", verificationCode);
+      formData.append("pubkey", testPublicKey);
+
+      const loginResponse = await fetch(`${BASE_URL}${authLoginPath}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pubkey: testPublicKey,
-          verification_code: verificationCode,
-          user_id: "e2e-test-user",
-        }),
+        body: formData,
       });
-      expect(completeResponse.status).toBe(200);
+      expect(loginResponse.status).toBe(200);
+
+      const html = await loginResponse.text();
+      expect(html).toContain("Authorization Complete");
 
       // Step 3: Check status
       const statusResponse = await fetch(`${BASE_URL}${authStatusPath}?pubkey=${encodeURIComponent(testPublicKey)}`);
@@ -594,8 +621,25 @@ describe("AWP Auth Discovery (/auth)", () => {
       expect(statusResult.authorized).toBe(true);
     });
 
+    test("rejects invalid credentials", async () => {
+      const formData = new FormData();
+      formData.append("username", "test");
+      formData.append("password", "wrongpassword");
+      formData.append("verification_code", "ABC-123");
+      formData.append("pubkey", "test.key");
+
+      const response = await fetch(`${BASE_URL}${authLoginPath}`, {
+        method: "POST",
+        body: formData,
+      });
+      expect(response.status).toBe(401);
+
+      const html = await response.text();
+      expect(html).toContain("Invalid username or password");
+    });
+
     test("rejects invalid verification code", async () => {
-      // Init auth
+      // Init auth first
       await fetch(`${BASE_URL}${authInitPath}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -605,14 +649,16 @@ describe("AWP Auth Discovery (/auth)", () => {
         }),
       });
 
-      // Complete with wrong code
-      const response = await fetch(`${BASE_URL}${authCompletePath}`, {
+      // Login with wrong verification code
+      const formData = new FormData();
+      formData.append("username", "test");
+      formData.append("password", "test123");
+      formData.append("verification_code", "WRONG-CODE");
+      formData.append("pubkey", "wrong.code.key");
+
+      const response = await fetch(`${BASE_URL}${authLoginPath}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pubkey: "wrong.code.key",
-          verification_code: "WRONG-CODE",
-        }),
+        body: formData,
       });
       expect(response.status).toBe(400);
     });
@@ -668,7 +714,7 @@ describe("AWP Auth Discovery (/auth)", () => {
 
   describe("Authenticated Requests", () => {
     test("succeeds with valid signature", async () => {
-      // First complete auth flow
+      // First complete auth flow via login
       const initResponse = await fetch(`${BASE_URL}${authInitPath}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -679,14 +725,16 @@ describe("AWP Auth Discovery (/auth)", () => {
       });
       const { verification_code } = (await initResponse.json()) as any;
 
-      await fetch(`${BASE_URL}${authCompletePath}`, {
+      // Complete auth via login form
+      const formData = new FormData();
+      formData.append("username", "test");
+      formData.append("password", "test123");
+      formData.append("verification_code", verification_code);
+      formData.append("pubkey", testPublicKey);
+
+      await fetch(`${BASE_URL}${authLoginPath}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pubkey: testPublicKey,
-          verification_code,
-          user_id: "signed-request-user",
-        }),
+        body: formData,
       });
 
       // Now make signed request

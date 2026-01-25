@@ -111,12 +111,6 @@ export interface AwpAuthLambdaConfig {
   excludePaths?: string[];
 
   /**
-   * Function to get authenticated user ID from a session/cookie
-   * Required for auth completion endpoint
-   */
-  getAuthenticatedUser?: (request: LambdaAuthRequest) => Promise<{ userId: string } | null>;
-
-  /**
    * TTL for authorized pubkeys in seconds
    * @default 2592000 (30 days)
    */
