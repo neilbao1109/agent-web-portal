@@ -25,6 +25,16 @@ import {
 } from "@agent-web-portal/aws-lambda";
 import { getAuthPageHtml, getAuthSuccessHtml } from "./auth/ui.ts";
 import {
+  createOutputBlobSlotS3,
+  getImagePresignedUrlS3,
+  getTempUploadS3,
+  isS3BlobStorageConfigured,
+  listStoredImagesS3,
+  readOutputBlobS3,
+  storeImageS3,
+  storeTempUploadS3,
+} from "./portals/blob-s3.ts";
+import {
   authPortal,
   basicPortal,
   blobPortal,
@@ -225,11 +235,250 @@ export async function handler(
       return responseToApiGateway(res);
     }
 
-    // Blob portal
+    // Blob portal MCP endpoint
     if (path === "/blob" || path === "/blob/mcp") {
       const req = createWebRequest(event, baseUrl);
       const res = await blobPortal.handleRequest(req);
       return responseToApiGateway(res);
+    }
+
+    // =========================================================================
+    // Blob Storage API Routes (S3-based presigned URLs)
+    // =========================================================================
+
+    // Prepare upload - upload file and get presigned GET URL (5 min TTL)
+    if (path === "/blob/prepare-upload" && httpMethod === "POST") {
+      if (!isS3BlobStorageConfigured()) {
+        return {
+          statusCode: 503,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Blob storage not configured" }),
+        };
+      }
+
+      try {
+        const contentType = event.headers["content-type"] ?? event.headers["Content-Type"] ?? "";
+        const body = event.body
+          ? event.isBase64Encoded
+            ? Buffer.from(event.body, "base64")
+            : Buffer.from(event.body)
+          : Buffer.alloc(0);
+
+        // For multipart, we need to parse the form data
+        if (contentType.includes("multipart/form-data")) {
+          // Simple extraction - find the binary data after headers
+          const boundary = contentType.match(/boundary=(.+)/)?.[1];
+          if (boundary) {
+            const parts = body.toString("binary").split(`--${boundary}`);
+            for (const part of parts) {
+              if (part.includes('name="image"')) {
+                // Find the start of binary data (after double CRLF)
+                const headerEnd = part.indexOf("\r\n\r\n");
+                if (headerEnd !== -1) {
+                  const fileData = part.slice(headerEnd + 4);
+                  // Remove trailing boundary markers
+                  const dataEnd = fileData.lastIndexOf("\r\n");
+                  const cleanData = dataEnd !== -1 ? fileData.slice(0, dataEnd) : fileData;
+                  const fileBuffer = Buffer.from(cleanData, "binary");
+
+                  // Extract content-type from part headers
+                  const partContentType =
+                    part.match(/Content-Type:\s*([^\r\n]+)/i)?.[1] ?? "image/png";
+
+                  const result = await storeTempUploadS3(
+                    fileBuffer.buffer as ArrayBuffer,
+                    partContentType
+                  );
+                  return {
+                    statusCode: 200,
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Access-Control-Allow-Origin": "*",
+                    },
+                    body: JSON.stringify(result),
+                  };
+                }
+              }
+            }
+          }
+          return {
+            statusCode: 400,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "No image file found in request" }),
+          };
+        }
+
+        // Raw binary upload
+        const imageContentType = contentType.startsWith("image/") ? contentType : "image/png";
+        const result = await storeTempUploadS3(body.buffer as ArrayBuffer, imageContentType);
+        return {
+          statusCode: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+          body: JSON.stringify(result),
+        };
+      } catch (error) {
+        console.error("prepare-upload error:", error);
+        return {
+          statusCode: 500,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Failed to prepare upload" }),
+        };
+      }
+    }
+
+    // Get temporary upload
+    if (path.startsWith("/blob/temp/") && httpMethod === "GET") {
+      const id = decodeURIComponent(path.slice("/blob/temp/".length));
+      const upload = await getTempUploadS3(id);
+
+      if (!upload) {
+        return {
+          statusCode: 404,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Temporary upload not found or expired" }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": upload.contentType,
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: Buffer.from(upload.data).toString("base64"),
+        isBase64Encoded: true,
+      };
+    }
+
+    // Prepare download - create output blob slot with presigned URLs
+    if (path === "/blob/prepare-download" && httpMethod === "POST") {
+      if (!isS3BlobStorageConfigured()) {
+        return {
+          statusCode: 503,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Blob storage not configured" }),
+        };
+      }
+
+      const result = await createOutputBlobSlotS3();
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify(result),
+      };
+    }
+
+    // Read output blob
+    if (path.startsWith("/blob/output/") && httpMethod === "GET") {
+      const id = decodeURIComponent(path.slice("/blob/output/".length));
+      const blob = await readOutputBlobS3(id);
+
+      if (!blob) {
+        return {
+          statusCode: 404,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Output blob not found or expired" }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": blob.contentType,
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: Buffer.from(blob.data).toString("base64"),
+        isBase64Encoded: true,
+      };
+    }
+
+    // Direct upload to permanent storage
+    if (path === "/blob/upload" && httpMethod === "POST") {
+      if (!isS3BlobStorageConfigured()) {
+        return {
+          statusCode: 503,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Blob storage not configured" }),
+        };
+      }
+
+      try {
+        const contentType = event.headers["content-type"] ?? event.headers["Content-Type"] ?? "";
+        const body = event.body
+          ? event.isBase64Encoded
+            ? Buffer.from(event.body, "base64")
+            : Buffer.from(event.body)
+          : Buffer.alloc(0);
+
+        const imageContentType = contentType.startsWith("image/") ? contentType : "image/png";
+        const result = await storeImageS3(body.buffer as ArrayBuffer, imageContentType);
+        return {
+          statusCode: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+          body: JSON.stringify(result),
+        };
+      } catch (error) {
+        console.error("upload error:", error);
+        return {
+          statusCode: 500,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Failed to upload image" }),
+        };
+      }
+    }
+
+    // Download image from permanent storage (redirect to presigned URL)
+    if (path.startsWith("/blob/files/") && httpMethod === "GET") {
+      const key = decodeURIComponent(path.slice("/blob/files/".length));
+
+      // Generate presigned URL and redirect
+      const presignedUrl = await getImagePresignedUrlS3(key);
+      if (!presignedUrl) {
+        return {
+          statusCode: 404,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Image not found" }),
+        };
+      }
+
+      return {
+        statusCode: 302,
+        headers: {
+          Location: presignedUrl,
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: "",
+      };
+    }
+
+    // List images in permanent storage
+    if (path === "/blob/files" && httpMethod === "GET") {
+      if (!isS3BlobStorageConfigured()) {
+        return {
+          statusCode: 503,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Blob storage not configured" }),
+        };
+      }
+
+      const images = await listStoredImagesS3();
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify({ images, count: images.length }),
+      };
     }
 
     // Auth portal routes

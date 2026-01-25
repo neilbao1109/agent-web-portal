@@ -55,6 +55,48 @@ Resources:
         RestrictPublicBuckets: true
 
   # ==========================================================================
+  # S3 Bucket for Blob Storage (images)
+  # ==========================================================================
+  
+  BlobS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-blobs-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          # Permanent images: 1 day TTL
+          - Id: ExpirePermanentImages
+            Prefix: images/
+            Status: Enabled
+            ExpirationInDays: 1
+          # Temporary uploads: 1 hour TTL (cleanup buffer)
+          - Id: ExpireTempUploads
+            Prefix: temp/
+            Status: Enabled
+            ExpirationInDays: 1
+          # Output blobs: 1 hour TTL (cleanup buffer)
+          - Id: ExpireOutputBlobs
+            Prefix: output/
+            Status: Enabled
+            ExpirationInDays: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3600
+
+  # ==========================================================================
   # Lambda Function
   # ==========================================================================
   
@@ -68,6 +110,7 @@ Resources:
       Environment:
         Variables:
           AUTH_TABLE: !Ref AuthTable
+          BLOB_BUCKET: !Ref BlobS3Bucket
           SKILLS_BUCKET: !If
             - CreateSkillsBucket
             - !Ref SkillsS3Bucket
@@ -76,6 +119,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AuthTable
+        - S3CrudPolicy:
+            BucketName: !Ref BlobS3Bucket
         - S3ReadPolicy:
             BucketName: !If
               - CreateSkillsBucket
@@ -169,3 +214,11 @@ Outputs:
       - CreateSkillsBucket
       - !Ref SkillsS3Bucket
       - !Ref SkillsBucket
+  
+  BlobBucketName:
+    Description: Blob S3 Bucket Name
+    Value: !Ref BlobS3Bucket
+  
+  BlobPortal:
+    Description: Blob Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/blob"

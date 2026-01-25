@@ -14,7 +14,7 @@
     },
     "packages/auth": {
       "name": "@agent-web-portal/auth",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "devDependencies": {
         "@types/bun": "latest",
         "bun-types": "^1.3.6",
@@ -25,7 +25,7 @@
     },
     "packages/aws-cli": {
       "name": "@agent-web-portal/aws-cli",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "awp": "./bin/awp.ts",
       },
@@ -47,7 +47,7 @@
     },
     "packages/aws-lambda": {
       "name": "@agent-web-portal/aws-lambda",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@agent-web-portal/auth": "workspace:*",
         "@agent-web-portal/core": "workspace:*",
@@ -68,7 +68,7 @@
     },
     "packages/client": {
       "name": "@agent-web-portal/client",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@agent-web-portal/core": "workspace:*",
       },
@@ -90,7 +90,7 @@
     },
     "packages/core": {
       "name": "@agent-web-portal/core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "zod": "3",
       },
@@ -103,12 +103,14 @@
     },
     "packages/examples": {
       "name": "@agent-web-portal/examples",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@agent-web-portal/auth": "workspace:*",
         "@agent-web-portal/aws-lambda": "workspace:*",
         "@agent-web-portal/client": "workspace:*",
         "@agent-web-portal/core": "workspace:*",
+        "@aws-sdk/client-s3": "^3.975.0",
+        "@aws-sdk/s3-request-presigner": "^3.975.0",
         "jsonata": "^2.0.5",
         "zod": "3",
       },
