@@ -747,6 +747,41 @@ if (response.status === 401) {
 const headers = await auth.sign(endpoint, "POST", url, body);
 ```
 
+**KeyStorage 实现**：
+
+客户端提供三种 KeyStorage 实现，按使用场景选择：
+
+| 实现 | 场景 | 说明 |
+|------|------|------|
+| `MemoryKeyStorage` | 测试/单次会话 | 密钥仅保存在内存，进程退出后丢失 |
+| `FileKeyStorage` | CLI 工具/服务端 | 密钥保存到文件系统 |
+| `LocalStorageKeyStorage` | Web 应用 | 密钥保存到浏览器 localStorage |
+
+```typescript
+// 文件存储 (适用于 CLI 和服务端)
+import { FileKeyStorage } from "@agent-web-portal/client";
+const keyStorage = new FileKeyStorage({ directory: "~/.awp/keys" });
+
+// 浏览器 localStorage 存储
+import { LocalStorageKeyStorage } from "@agent-web-portal/client";
+const keyStorage = new LocalStorageKeyStorage({ prefix: "my-app-" });
+```
+
+**回调函数**：
+
+```typescript
+interface AuthCallbacks {
+  // 需要授权时调用，显示 authUrl 和 verificationCode 给用户
+  onAuthRequired?: (challenge: AuthChallenge) => Promise<boolean>;
+  // 授权成功时调用
+  onAuthSuccess?: () => void;
+  // 授权失败时调用
+  onAuthFailed?: (error: Error) => void;
+  // 密钥即将过期时调用 (可选，用于主动更新)
+  onKeyExpiring?: (daysRemaining: number) => void;
+}
+```
+
 ### 7.8 测试覆盖
 
 E2E 测试覆盖以下场景：

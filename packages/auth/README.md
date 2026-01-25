@@ -1,15 +1,15 @@
 # @agent-web-portal/auth
 
-Agent Web Portal 认证中间件，支持 OAuth 2.1、HMAC 签名和 API Key 认证。
+AWP 认证中间件，基于 **ECDSA P-256 密钥对** 实现 Client 授权认证。
 
 ## 概述
 
-`@agent-web-portal/auth` 提供灵活的认证机制：
+`@agent-web-portal/auth` 提供 AWP 的服务端认证机制：
 
-- **OAuth 2.0** - RFC 9728 Protected Resource Metadata 支持
-- **HMAC Signature** - 适用于微服务间安全通信
-- **API Key** - 简单的静态密钥认证
-- **401 Challenge** - 自动返回支持的认证方案
+- **ECDSA P-256 密钥对** - 客户端生成密钥对，服务端验证签名
+- **服务端验证码** - 防钓鱼保护，验证码由服务端生成
+- **请求签名** - 每个请求都使用私钥签名
+- **401 Challenge** - 未认证请求返回标准挑战响应
 
 ## 安装
 
@@ -20,235 +20,278 @@ bun add @agent-web-portal/auth
 ## 快速开始
 
 ```typescript
-import { createAuthMiddleware } from "@agent-web-portal/auth";
+import {
+  createAwpAuthMiddleware,
+  routeAuthRequest,
+  MemoryPendingAuthStore,
+  MemoryPubkeyStore,
+} from "@agent-web-portal/auth";
 
-const auth = createAuthMiddleware({
-  schemes: [
-    {
-      type: "api_key",
-      validateKey: async (key) => ({
-        valid: key === process.env.API_KEY,
-      }),
-    },
-  ],
+// 创建存储 (生产环境使用 DynamoDB/Redis)
+const pendingAuthStore = new MemoryPendingAuthStore();
+const pubkeyStore = new MemoryPubkeyStore();
+
+// 创建认证中间件
+const authMiddleware = createAwpAuthMiddleware({
+  pendingAuthStore,
+  pubkeyStore,
 });
 
 // 在请求处理中使用
 Bun.serve({
   port: 3000,
   fetch: async (req) => {
-    const result = await auth(req);
+    const authReq = {
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      text: () => req.clone().text(),
+      clone: () => authReq,
+    };
+
+    // 处理认证端点 (/auth/init, /auth/status)
+    const authResponse = await routeAuthRequest(authReq, {
+      baseUrl: "http://localhost:3000",
+      pendingAuthStore,
+      pubkeyStore,
+    });
+    if (authResponse) return authResponse;
+
+    // 验证请求签名
+    const result = await authMiddleware(authReq);
     if (!result.authorized) {
       return result.challengeResponse!;
     }
-    return portal.handleRequest(req);
+
+    // 继续处理业务逻辑
+    // result.context 包含 { userId, pubkey, clientName }
+    return handleRequest(req, result.context);
   },
 });
 ```
 
-## 认证方案
+## 认证流程
 
-### OAuth 2.0
+```
+1. Client 发起请求 (无认证)
+   → Server 返回 401 + auth_init_endpoint
 
-```typescript
-{
-  type: "oauth2",
-  resourceMetadata: {
-    resource: "https://api.example.com/mcp",
-    authorization_servers: ["https://auth.example.com"],
-    scopes_supported: ["read", "write"],
-  },
-  validateToken: async (token) => {
-    const claims = await verifyJwt(token);
-    return { valid: true, claims };
-  },
-}
+2. Client 生成密钥对，调用 POST /auth/init
+   { pubkey, client_name }
+   → Server 生成验证码，返回 { auth_url, verification_code, expires_in }
+
+3. Client 显示验证码给用户
+
+4. 用户访问 auth_url，登录后输入验证码
+
+5. Server 验证码匹配，存储 pubkey → userId 映射
+
+6. Client 轮询 /auth/status，获取授权状态
+
+7. 后续请求携带签名
+   X-AWP-Pubkey, X-AWP-Timestamp, X-AWP-Signature
 ```
 
-自动暴露 `/.well-known/oauth-protected-resource` 端点。
+## 请求签名
 
-### HMAC Signature
+每个认证请求需要携带以下 HTTP 头：
 
-```typescript
-{
-  type: "hmac",
-  secret: process.env.HMAC_SECRET,
-  // 或使用密钥查找函数
-  secret: async (keyId) => await getSecretForService(keyId),
-  algorithm: "sha256",        // 默认
-  signatureHeader: "X-AWP-Signature",
-  keyIdHeader: "X-AWP-Key-Id",
-  timestampHeader: "X-AWP-Timestamp",
-  maxClockSkew: 300,          // 5 分钟
-}
-```
+| 头名称 | 说明 |
+|--------|------|
+| `X-AWP-Pubkey` | 公钥 (格式: `x.y`, base64url 编码) |
+| `X-AWP-Timestamp` | Unix 时间戳 (秒) |
+| `X-AWP-Signature` | 签名 (base64url 编码) |
 
-### API Key
+**签名算法**：
 
 ```typescript
-{
-  type: "api_key",
-  header: "X-API-Key",        // 默认
-  validateKey: async (key) => {
-    const user = await db.findByApiKey(key);
-    return user
-      ? { valid: true, metadata: { userId: user.id } }
-      : { valid: false, error: "Invalid key" };
-  },
-}
+payload = `${timestamp}.${METHOD}.${path}.${sha256(body)}`
+signature = ECDSA-P256-SHA256(privateKey, payload)
 ```
 
 ## 401 Challenge Response
 
-当认证失败时，返回包含所有支持方案的 401 响应：
+未认证请求返回：
 
 ```json
 {
   "error": "unauthorized",
   "error_description": "Authentication required",
-  "supported_schemes": [
-    { "scheme": "oauth2", "resource_metadata_url": "/.well-known/oauth-protected-resource" },
-    { "scheme": "api_key", "header": "X-API-Key" }
-  ]
+  "auth_init_endpoint": "/auth/init"
 }
 ```
 
-## Well-Known 端点
+HTTP 头：
+
+```
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: AWP realm="awp"
+Content-Type: application/json
+```
+
+## Auth Init 端点
+
+**请求**：
+
+```
+POST /auth/init
+Content-Type: application/json
+
+{
+  "pubkey": "abc123...xyz.def456...uvw",
+  "client_name": "My AI Agent"
+}
+```
+
+**响应**：
+
+```json
+{
+  "auth_url": "https://example.com/auth?pubkey=abc123...",
+  "verification_code": "ABC-123",
+  "expires_in": 600,
+  "poll_interval": 5
+}
+```
+
+## 配置选项
 
 ```typescript
-import { handleWellKnown, WELL_KNOWN_PATHS } from "@agent-web-portal/auth";
+interface AwpAuthConfig {
+  // 必需
+  pendingAuthStore: PendingAuthStore;  // 待授权存储
+  pubkeyStore: PubkeyStore;            // 已授权公钥存储
 
-// 在路由中处理
-if (url.pathname.includes("/.well-known/")) {
-  // 适配路径（如果使用前缀路由）
-  const modifiedUrl = new URL(req.url);
-  modifiedUrl.pathname = WELL_KNOWN_PATHS.OAUTH_PROTECTED_RESOURCE;
-  const modifiedReq = { ...req, url: modifiedUrl.toString() };
-  
-  const wellKnownResponse = handleWellKnown(modifiedReq, config);
-  if (wellKnownResponse) {
-    return wellKnownResponse;
+  // 可选
+  authInitPath?: string;        // 默认: "/auth/init"
+  authStatusPath?: string;      // 默认: "/auth/status"
+  authPagePath?: string;        // 默认: "/auth"
+  verificationCodeTTL?: number; // 默认: 600 (10分钟)
+  maxClockSkew?: number;        // 默认: 300 (5分钟)
+  excludePaths?: string[];      // 排除认证的路径
+}
+```
+
+## 存储接口
+
+### PendingAuthStore
+
+存储待授权请求：
+
+```typescript
+interface PendingAuthStore {
+  create(auth: PendingAuth): Promise<void>;
+  get(pubkey: string): Promise<PendingAuth | null>;
+  delete(pubkey: string): Promise<void>;
+  validateCode(pubkey: string, code: string): Promise<boolean>;
+}
+```
+
+### PubkeyStore
+
+存储已授权公钥：
+
+```typescript
+interface PubkeyStore {
+  lookup(pubkey: string): Promise<AuthorizedPubkey | null>;
+  store(auth: AuthorizedPubkey): Promise<void>;
+  revoke(pubkey: string): Promise<void>;
+  listByUser?(userId: string): Promise<AuthorizedPubkey[]>;
+}
+```
+
+### 内置实现
+
+- `MemoryPendingAuthStore` - 内存存储 (仅用于开发/测试)
+- `MemoryPubkeyStore` - 内存存储 (仅用于开发/测试)
+
+生产环境请使用 `@agent-web-portal/aws-lambda` 中的 DynamoDB 实现。
+
+## 授权完成处理
+
+当用户在授权页面输入验证码后，调用 `completeAuthorization`：
+
+```typescript
+import { completeAuthorization } from "@agent-web-portal/auth";
+
+// 在授权页面的 POST 处理中
+async function handleAuthPageSubmit(req: Request, userId: string) {
+  const { pubkey, verification_code } = await req.json();
+
+  const result = await completeAuthorization(pubkey, verification_code, userId, {
+    pendingAuthStore,
+    pubkeyStore,
+    authorizationTTL: 30 * 24 * 60 * 60, // 30天
+  });
+
+  if (result.success) {
+    return new Response(JSON.stringify({ success: true }));
+  } else {
+    return new Response(JSON.stringify({ error: result.error }), { status: 400 });
   }
 }
 ```
 
-## 完整集成示例
+## 排除路径
 
-```typescript
-import { createAgentWebPortal } from "@agent-web-portal/core";
-import {
-  type AuthConfig,
-  type AuthHttpRequest,
-  createAuthMiddleware,
-  handleWellKnown,
-  WELL_KNOWN_PATHS,
-} from "@agent-web-portal/auth";
+以下路径默认不需要认证：
 
-// 配置认证
-const authConfig: AuthConfig = {
-  schemes: [
-    {
-      type: "oauth2",
-      resourceMetadata: {
-        resource: "https://api.example.com/mcp",
-        authorization_servers: ["https://auth.example.com"],
-        scopes_supported: ["read", "write"],
-      },
-      validateToken: async (token) => {
-        // 验证 JWT 或调用 Auth Server
-        const isValid = await verifyToken(token);
-        return isValid
-          ? { valid: true, claims: { sub: "user-id" } }
-          : { valid: false, error: "Invalid token" };
-      },
-    },
-    {
-      type: "api_key",
-      header: "X-API-Key",
-      validateKey: async (key) => {
-        const user = await db.findUserByApiKey(key);
-        return user
-          ? { valid: true, metadata: { userId: user.id } }
-          : { valid: false, error: "Invalid API key" };
-      },
-    },
-  ],
-  excludePaths: ["/health", "/.well-known/"],
-};
+- `/auth/init` - 认证初始化
+- `/auth/status` - 认证状态轮询
+- `/auth/` - 认证页面
+- `/health`, `/healthz`, `/ping` - 健康检查
 
-const authMiddleware = createAuthMiddleware(authConfig);
-
-// 创建 Portal
-const portal = createAgentWebPortal({ name: "secure-portal" })
-  .registerTool("secure_action", { /* ... */ })
-  .build();
-
-// HTTP 处理
-Bun.serve({
-  port: 3000,
-  fetch: async (req) => {
-    const url = new URL(req.url);
-    const authReq = req as unknown as AuthHttpRequest;
-
-    // 1. 处理 well-known 端点
-    if (url.pathname.includes("/.well-known/")) {
-      const modifiedUrl = new URL(req.url);
-      modifiedUrl.pathname = WELL_KNOWN_PATHS.OAUTH_PROTECTED_RESOURCE;
-      const modifiedReq = { ...authReq, url: modifiedUrl.toString() };
-      const wellKnownResponse = handleWellKnown(modifiedReq, authConfig);
-      if (wellKnownResponse) return wellKnownResponse;
-    }
-
-    // 2. 执行认证
-    const authResult = await authMiddleware(authReq);
-    if (!authResult.authorized) {
-      return authResult.challengeResponse!;
-    }
-
-    // 3. 处理 Portal 请求
-    return portal.handleRequest(req);
-  },
-});
-```
-
-## API
-
-### `createAuthMiddleware(config)`
-
-创建认证中间件。
-
-### `handleWellKnown(request, config)`
-
-处理 well-known 端点请求。
-
-### `hasAuthCredentials(request, config)`
-
-检查请求是否包含认证凭据。
+可通过 `excludePaths` 配置添加更多路径。
 
 ## 测试
 
-E2E 测试位于 `packages/examples/e2e.test.ts`，覆盖：
+E2E 测试覆盖以下场景：
 
-- **Well-Known 端点**：Protected Resource Metadata 返回
-- **401 Challenge**：未认证请求的响应格式
-- **认证流程**：Bearer token 和 API Key 验证
-- **路径排除**：well-known 和 health 端点不需要认证
+1. **Auth Init 测试**：验证码生成和返回
+2. **Auth Complete 测试**：验证码验证和授权完成
+3. **签名验证测试**：有效/无效签名处理
+4. **时间戳验证**：过期时间戳拒绝
+5. **路径排除测试**：认证端点和健康检查不需要认证
 
-运行测试：
+## API 导出
 
-```bash
-bun test packages/examples/e2e.test.ts
-```
+### 中间件
 
-## 类型导出
+- `createAwpAuthMiddleware(config)` - 创建认证中间件
+- `routeAuthRequest(request, options)` - 路由认证端点请求
+- `hasAwpAuthCredentials(request)` - 检查请求是否包含认证凭据
 
-- `AuthConfig` - 认证配置
-- `AuthScheme` - 认证方案联合类型
-- `AuthResult` - 认证结果
-- `AuthContext` - 认证上下文
-- `ProtectedResourceMetadata` - OAuth 资源元数据
+### Auth Init
+
+- `handleAuthInit(request, options)` - 处理 /auth/init 请求
+- `handleAuthStatus(request, options)` - 处理 /auth/status 请求
+- `generateVerificationCode()` - 生成验证码
+- `MemoryPendingAuthStore` - 内存待授权存储
+
+### Auth Complete
+
+- `completeAuthorization(pubkey, code, userId, options)` - 完成授权
+- `handleAuthComplete(request, userId, options)` - 处理授权完成请求
+- `MemoryPubkeyStore` - 内存公钥存储
+
+### 低级工具
+
+- `verifyAwpAuth(request, pubkeyStore, maxClockSkew)` - 验证请求签名
+- `verifySignature(pubkey, payload, signature)` - 验证 ECDSA 签名
+- `validateTimestamp(timestamp, maxClockSkew)` - 验证时间戳
+- `buildChallengeResponse(authInitEndpoint)` - 构建 401 响应
+
+### 类型
+
+- `AwpAuthConfig` - 认证配置
+- `PendingAuth`, `PendingAuthStore` - 待授权相关
+- `AuthorizedPubkey`, `PubkeyStore` - 已授权相关
+- `AuthContext`, `AuthResult` - 认证结果
 - `AuthHttpRequest` - HTTP 请求接口
-- `WELL_KNOWN_PATHS` - Well-known 端点路径常量
+- `AuthInitRequest`, `AuthInitResponse` - 初始化请求/响应
+- `AuthCompleteRequest`, `AuthStatusResponse` - 完成/状态请求/响应
+- `ChallengeBody` - 401 响应体
+- `AWP_AUTH_DEFAULTS`, `AWP_AUTH_HEADERS` - 常量
 
 ## License
 
