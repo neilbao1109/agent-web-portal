@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWP Examples SST - Multi-portal Lambda with React UI (SAM version)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+
+Parameters:
+  SkillsBucket:
+    Type: String
+    Description: S3 bucket name for skills storage
+    Default: ""
+
+Resources:
+  # ==========================================================================
+  # DynamoDB Table for Auth
+  # ==========================================================================
+  
+  AuthTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-auth"
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: AWP-Examples-SST
+
+  # ==========================================================================
+  # S3 Bucket for Skills (optional)
+  # ==========================================================================
+  
+  SkillsS3Bucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateSkillsBucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-skills-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ==========================================================================
+  # S3 Bucket for Blob Storage (images)
+  # ==========================================================================
+  
+  BlobS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-blobs-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpirePermanentImages
+            Prefix: images/
+            Status: Enabled
+            ExpirationInDays: 1
+          - Id: ExpireTempUploads
+            Prefix: temp/
+            Status: Enabled
+            ExpirationInDays: 1
+          - Id: ExpireOutputBlobs
+            Prefix: output/
+            Status: Enabled
+            ExpirationInDays: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3600
+
+  # ==========================================================================
+  # Lambda Function
+  # ==========================================================================
+  
+  ExamplesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-handler"
+      CodeUri: dist/
+      Handler: handler.handler
+      Description: AWP Examples SST - Multi-portal MCP endpoint with React UI
+      Environment:
+        Variables:
+          AUTH_TABLE: !Ref AuthTable
+          BLOB_BUCKET: !Ref BlobS3Bucket
+          SKILLS_BUCKET: !If
+            - CreateSkillsBucket
+            - !Ref SkillsS3Bucket
+            - !Ref SkillsBucket
+          NODE_OPTIONS: "--enable-source-maps"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuthTable
+        - S3CrudPolicy:
+            BucketName: !Ref BlobS3Bucket
+        - S3ReadPolicy:
+            BucketName: !If
+              - CreateSkillsBucket
+              - !Ref SkillsS3Bucket
+              - !Ref SkillsBucket
+      Events:
+        ProxyRoute:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref ExamplesApi
+        RootRoute:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref ExamplesApi
+
+  # ==========================================================================
+  # API Gateway
+  # ==========================================================================
+  
+  ExamplesApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,Mcp-Session-Id,X-AWP-Signature,X-AWP-Pubkey,X-AWP-Timestamp'"
+        AllowOrigin: "'*'"
+      BinaryMediaTypes:
+        - "image/*"
+        - "font/*"
+        - "application/octet-stream"
+
+# ==========================================================================
+# Conditions
+# ==========================================================================
+
+Conditions:
+  CreateSkillsBucket: !Equals [!Ref SkillsBucket, ""]
+
+# ==========================================================================
+# Outputs
+# ==========================================================================
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  
+  UiUrl:
+    Description: React UI URL
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/ui"
+  
+  BasicPortal:
+    Description: Basic Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/basic"
+  
+  EcommercePortal:
+    Description: E-commerce Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/ecommerce"
+  
+  JsonataPortal:
+    Description: JSONata Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/jsonata"
+  
+  AuthPortal:
+    Description: Auth Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/auth"
+  
+  BlobPortal:
+    Description: Blob Portal MCP endpoint
+    Value: !Sub "https://${ExamplesApi}.execute-api.${AWS::Region}.amazonaws.com/prod/blob"
+  
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt ExamplesFunction.Arn
+  
+  AuthTableName:
+    Description: DynamoDB Auth Table Name
+    Value: !Ref AuthTable
+  
+  SkillsBucketName:
+    Description: Skills S3 Bucket Name
+    Value: !If
+      - CreateSkillsBucket
+      - !Ref SkillsS3Bucket
+      - !Ref SkillsBucket
+  
+  BlobBucketName:
+    Description: Blob S3 Bucket Name
+    Value: !Ref BlobS3Bucket

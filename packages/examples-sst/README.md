@@ -1,15 +1,15 @@
 # @agent-web-portal/examples-sst
 
-SST-based example Lambda portals for Agent Web Portal.
+SAM-based example Lambda portals for Agent Web Portal.
 
-This package demonstrates how to deploy AWP portals using [SST v3 (Ion)](https://sst.dev/) instead of AWS SAM.
+This package demonstrates how to deploy AWP portals using AWS SAM.
 
 ## Features
 
-- **Pure SST Deployment**: No SAM templates required
-- **Live Development**: Hot reload with `sst dev`
-- **Infrastructure as Code**: All AWS resources defined in TypeScript
-- **Modern Stack**: SST v3 with Pulumi under the hood
+- **SAM Deployment**: Standard AWS SAM template
+- **Local Development**: Hot reload with Bun + Vite
+- **SAM Local**: Test Lambda locally with `sam local start-api`
+- **React UI**: Modern React frontend with MUI
 
 ## Available Portals
 
@@ -27,44 +27,65 @@ This package demonstrates how to deploy AWP portals using [SST v3 (Ion)](https:/
 
 - [Bun](https://bun.sh/) runtime
 - [AWS CLI](https://aws.amazon.com/cli/) configured with credentials
-- SST CLI (installed via npx)
+- [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
 
 ### Local Development
 
 ```bash
 # Install dependencies
 bun install
+cd ui && bun install && cd ..
 
-# Start local development server (no AWS required)
-bun run start
-
-# Or with hot reload
+# Start local backend server (Bun, no AWS required)
 bun run dev:local
+
+# In another terminal, start UI with local backend
+bun run dev
 ```
 
-The server will be available at `http://localhost:3000`.
+The UI will be available at `http://localhost:5173`, proxying to local backend at `http://localhost:3000`.
+
+### Development with SAM Local
+
+```bash
+# Build the Lambda
+bun run sam:build
+
+# Start SAM local API (port 3456)
+bun run sam:local
+
+# In another terminal, start UI pointing to SAM
+bun run dev --api sam
+```
+
+### Development with Remote API
+
+```bash
+# Start UI pointing to deployed API
+bun run dev --api https://xxx.execute-api.us-east-1.amazonaws.com/prod
+```
 
 ### Deploy to AWS
 
 ```bash
-# Development with live reload (requires AWS)
-npx sst dev
+# Build Lambda
+bun run build
 
-# Deploy to AWS (development stage)
-npx sst deploy
+# Build with SAM
+bun run sam:build
 
-# Deploy to production
-npx sst deploy --stage production
+# Deploy (first time, guided)
+bun run sam:deploy
 
-# Remove all resources
-npx sst remove
+# Remove stack
+bun run sam:remove
 ```
 
 ## Project Structure
 
 ```
 examples-sst/
-├── sst.config.ts          # SST configuration (infrastructure as code)
+├── template.yaml          # SAM template (infrastructure as code)
 ├── package.json           # Package configuration
 ├── tsconfig.json          # TypeScript configuration
 ├── server.ts              # Local development server (Bun)
@@ -92,109 +113,33 @@ examples-sst/
     └── src/
 ```
 
-## SST Configuration
+## Scripts
 
-The `sst.config.ts` file defines all AWS infrastructure:
+| Script | Description |
+|--------|-------------|
+| `bun run dev` | Start UI (default: local backend at :3000) |
+| `bun run dev --api sam` | Start UI with SAM local (:3456) |
+| `bun run dev --api <url>` | Start UI with custom API URL |
+| `bun run dev:local` | Start local Bun backend server |
+| `bun run sam:build` | Build Lambda + SAM |
+| `bun run sam:local` | Start SAM local API |
+| `bun run sam:deploy` | Deploy to AWS |
+| `bun run sam:remove` | Remove AWS stack |
 
-```typescript
-export default $config({
-  app(input) {
-    return {
-      name: "awp-examples-sst",
-      removal: input?.stage === "production" ? "retain" : "remove",
-      home: "aws",
-    };
-  },
-  async run() {
-    // DynamoDB table for auth
-    const authTable = new sst.aws.Dynamo("AuthTable", { ... });
+## AWS Resources
 
-    // S3 bucket for blob storage
-    const blobBucket = new sst.aws.Bucket("BlobBucket", { ... });
+The SAM template creates:
 
-    // API Gateway + Lambda
-    const api = new sst.aws.ApiGatewayV2("Api", { ... });
-    api.route("$default", { handler: "src/handler.handler", ... });
-
-    // Static site for UI
-    const site = new sst.aws.StaticSite("UI", { ... });
-
-    return { api: api.url, ui: site.url };
-  },
-});
-```
-
-## Test Users
-
-For development and testing:
-
-| Username | Password | User ID |
-|----------|----------|---------|
-| test | test123 | test-user-001 |
-| admin | admin123 | admin-user-001 |
-| demo | demo | demo-user-001 |
-
-## API Endpoints
-
-### Health Check
-
-```bash
-curl http://localhost:3000/health
-```
-
-### Portal Endpoints
-
-```bash
-# Initialize a portal
-curl -X POST http://localhost:3000/basic \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
-
-# List tools
-curl -X POST http://localhost:3000/basic \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-
-# Call a tool
-curl -X POST http://localhost:3000/basic \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}'
-```
-
-### Auth Endpoints
-
-```bash
-# Initialize auth
-curl -X POST http://localhost:3000/auth/init \
-  -H "Content-Type: application/json" \
-  -d '{"pubkey":"...","client_name":"My Client"}'
-
-# Check auth status
-curl http://localhost:3000/auth/status?pubkey=...
-```
-
-## Comparison with SAM Version
-
-| Feature | SAM (`examples`) | SST (`examples-sst`) |
-|---------|------------------|----------------------|
-| Config Format | YAML (template.yaml) | TypeScript (sst.config.ts) |
-| Local Dev | `sam local start-api` | `bun run start` or `npx sst dev` |
-| Deploy | `sam deploy --guided` | `npx sst deploy` |
-| Live Reload | ❌ | ✅ (with `sst dev`) |
-| Type Safety | ❌ | ✅ |
-| Console | CloudWatch | SST Console |
+- **API Gateway** - HTTP API for all endpoints
+- **Lambda Function** - Handles all portal routes
+- **DynamoDB Table** - Auth state storage
+- **S3 Bucket (Blobs)** - Image/blob storage
+- **S3 Bucket (Skills)** - Skill definitions storage (optional)
 
 ## Environment Variables
 
-When deployed, the Lambda function receives these environment variables:
-
 | Variable | Description |
 |----------|-------------|
-| `AUTH_TABLE` | DynamoDB table name for auth storage |
-| `BLOB_BUCKET` | S3 bucket name for blob storage |
-| `SKILLS_BUCKET` | S3 bucket name for skills (optional) |
-| `AWS_REGION` | AWS region |
-
-## License
-
-MIT
+| `AUTH_TABLE` | DynamoDB table name for auth |
+| `BLOB_BUCKET` | S3 bucket name for blobs |
+| `SKILLS_BUCKET` | S3 bucket name for skills |

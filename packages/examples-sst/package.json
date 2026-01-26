@@ -2,20 +2,21 @@
   "name": "@agent-web-portal/examples-sst",
   "version": "0.1.0",
   "private": true,
-  "description": "SST-based example Lambda portals for Agent Web Portal",
+  "description": "SAM-based example Lambda portals for Agent Web Portal",
   "type": "module",
   "main": "dist/handler.mjs",
   "scripts": {
     "start": "bun run server.ts",
-    "dev": "sst dev",
-    "dev:local": "bun run --watch server.ts",
-    "ui": "bun run --cwd ui dev",
-    "clean": "rimraf .turbo dist .sst",
+    "dev": "bun run --cwd ui dev",
+    "dev:local": "cd ../.. && bun run --watch packages/examples-sst/server.ts",
+    "clean": "rimraf .turbo dist .aws-sam",
     "build": "bun build src/handler.ts --outdir dist --format esm --target node --external '@aws-sdk/*' && mv dist/handler.js dist/handler.mjs",
-    "deploy": "sst deploy",
-    "deploy:prod": "sst deploy --stage production",
-    "remove": "sst remove",
-    "console": "sst console",
+    "build:ui": "cd ui && bun run build && cp -r dist ../dist/ui",
+    "build:all": "bun run build && bun run build:ui",
+    "sam:build": "bun run build && sam build",
+    "sam:local": "sam local start-api --port 3456",
+    "sam:deploy": "sam deploy --guided",
+    "sam:remove": "sam delete",
     "test": "bun test",
     "test:e2e": "bun test e2e.test.ts",
     "typecheck": "tsc --noEmit",
@@ -37,7 +38,6 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.147",
     "@types/bun": "latest",
-    "@types/node": "^22.10.5",
-    "sst": "^3.17.37"
+    "@types/node": "^22.10.5"
   }
 }
