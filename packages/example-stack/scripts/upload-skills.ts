@@ -191,7 +191,6 @@ async function main() {
   });
 
   console.log(`Found ${skills.length} skills to package:`);
-  console.log(`Using AWS profile: ${DEFAULT_AWS_PROFILE}`);
 
   const s3 = bucketName ? new S3Client(awsConfig) : null;
   const manifest: SkillManifestEntry[] = [];

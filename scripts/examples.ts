@@ -66,39 +66,39 @@ if (command === "api") {
     run(webuiDir, "bun", ["run", "dev"]);
   }
 } else if (command === "deploy") {
-	console.log("🚀 Deploying examples to AWS...\n");
+  console.log("🚀 Deploying examples to AWS...\n");
 
-	// Step 1: Deploy API stack
-	console.log("📦 Step 1/2: Deploying API stack (Lambda + API Gateway + Skills)...\n");
-	const apiSuccess = runSync(stackDir, "bun", ["run", "deploy"]);
+  // Step 1: Deploy API stack
+  console.log("📦 Step 1/2: Deploying API stack (Lambda + API Gateway + Skills)...\n");
+  const apiSuccess = runSync(stackDir, "bun", ["run", "deploy"]);
 
-	if (!apiSuccess) {
-		console.error("\n❌ API deployment failed. Aborting.");
-		process.exit(1);
-	}
+  if (!apiSuccess) {
+    console.error("\n❌ API deployment failed. Aborting.");
+    process.exit(1);
+  }
 
-	console.log("\n✅ API stack deployed successfully!\n");
+  console.log("\n✅ API stack deployed successfully!\n");
 
-	// Step 2: Deploy WebUI
-	console.log("🌐 Step 2/2: Deploying WebUI (S3 + CloudFront)...\n");
-	const webuiSuccess = runSync(webuiDir, "bun", ["run", "build"]);
+  // Step 2: Deploy WebUI
+  console.log("🌐 Step 2/2: Deploying WebUI (S3 + CloudFront)...\n");
+  const webuiSuccess = runSync(webuiDir, "bun", ["run", "build"]);
 
-	if (!webuiSuccess) {
-		console.error("\n❌ WebUI build failed. Aborting.");
-		process.exit(1);
-	}
+  if (!webuiSuccess) {
+    console.error("\n❌ WebUI build failed. Aborting.");
+    process.exit(1);
+  }
 
-	const deploySuccess = runSync(webuiDir, "bun", ["run", "deploy"]);
+  const deploySuccess = runSync(webuiDir, "bun", ["run", "deploy"]);
 
-	if (!deploySuccess) {
-		console.error("\n❌ WebUI deployment failed.");
-		process.exit(1);
-	}
+  if (!deploySuccess) {
+    console.error("\n❌ WebUI deployment failed.");
+    process.exit(1);
+  }
 
-	console.log("\n✅ WebUI deployed successfully!");
-	console.log("\n🎉 All deployments complete!");
+  console.log("\n✅ WebUI deployed successfully!");
+  console.log("\n🎉 All deployments complete!");
 } else {
-	console.log(`
+  console.log(`
 Usage:
   bun run scripts/examples.ts api              # Start local dev server
   bun run scripts/examples.ts api --prod       # Start SAM local
@@ -108,5 +108,5 @@ Usage:
 
   bun run scripts/examples.ts deploy           # Deploy both API and WebUI to AWS
 `);
-	process.exit(1);
+  process.exit(1);
 }

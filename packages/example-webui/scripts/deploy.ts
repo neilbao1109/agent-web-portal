@@ -98,7 +98,6 @@ async function main() {
   if (cloudFrontId) {
     console.log(`✅ Found CloudFront distribution: ${cloudFrontId}`);
   }
-  console.log(`Using AWS profile: ${DEFAULT_AWS_PROFILE}`);
   console.log("");
 
   // Check if UI dist exists
