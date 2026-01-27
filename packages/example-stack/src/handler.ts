@@ -235,10 +235,13 @@ export async function handler(
       ?.method ??
     "GET";
 
-  // Build base URL
+  // Build base URL - include stage for API Gateway direct access
   const protocol = event.headers["x-forwarded-proto"] ?? "https";
   const host = event.headers.host ?? event.headers.Host ?? "localhost";
-  const baseUrl = `${protocol}://${host}`;
+  const stage = event.requestContext?.stage;
+  // If accessing through API Gateway directly (not CloudFront), include the stage
+  const isApiGatewayDirect = host.includes("execute-api.") && stage && stage !== "$default";
+  const baseUrl = isApiGatewayDirect ? `${protocol}://${host}/${stage}` : `${protocol}://${host}`;
 
   // Get origin for CORS - must be explicit origin when using credentials
   const requestOrigin = event.headers.origin ?? event.headers.Origin;
