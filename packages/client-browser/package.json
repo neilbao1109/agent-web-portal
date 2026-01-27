@@ -1,0 +1,59 @@
+{
+  "name": "@agent-web-portal/client-browser",
+  "version": "0.2.0",
+  "description": "Browser-specific storage and utilities for Agent Web Portal client",
+  "license": "MIT",
+  "author": "Agent Web Portal Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/agent-web-portal.git",
+    "directory": "packages/client-browser"
+  },
+  "homepage": "https://github.com/anthropics/agent-web-portal#readme",
+  "bugs": {
+    "url": "https://github.com/anthropics/agent-web-portal/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "ai-agent",
+    "agent-web-portal",
+    "awp",
+    "client",
+    "browser",
+    "indexeddb",
+    "localstorage"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf .turbo dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "dependencies": {
+    "@agent-web-portal/client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bun-types": "^1.3.6"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

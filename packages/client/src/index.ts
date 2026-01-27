@@ -4,11 +4,17 @@
  * Provides a client for interacting with AWP servers, with automatic
  * blob handling through presigned URLs and keypair-based authentication.
  *
+ * Platform-specific storage implementations are in separate packages:
+ * - @agent-web-portal/client-nodejs: FileKeyStorage
+ * - @agent-web-portal/client-browser: IndexedDBKeyStorage, LocalStorageKeyStorage, auth window utilities
+ * - @agent-web-portal/client-react: React hooks for auth and client
+ *
  * @example
  * ```typescript
- * import { AwpClient, AwpAuth, FileKeyStorage, S3StorageProvider } from "@agent-web-portal/client";
+ * // Node.js usage
+ * import { AwpClient, AwpAuth } from "@agent-web-portal/client";
+ * import { FileKeyStorage } from "@agent-web-portal/client-nodejs";
  *
- * // Create auth handler
  * const auth = new AwpAuth({
  *   clientName: "My AI Agent",
  *   keyStorage: new FileKeyStorage({ directory: "~/.awp/keys" }),
@@ -21,22 +27,14 @@
  *   },
  * });
  *
- * const client = new AwpClient({
- *   endpoint: "https://my-awp-server.com",
- *   auth,
- *   storage: new S3StorageProvider({
- *     region: "us-east-1",
- *     bucket: "my-bucket",
- *   }),
- * });
+ * // Browser usage
+ * import { AwpClient, AwpAuth } from "@agent-web-portal/client";
+ * import { IndexedDBKeyStorage } from "@agent-web-portal/client-browser";
  *
- * // Call a tool with automatic blob handling
- * const result = await client.callTool("process-document", {
- *   document: "s3://my-bucket/input/doc.pdf",
- *   options: { quality: 80 },
+ * const auth = new AwpAuth({
+ *   clientName: "My Web App",
+ *   keyStorage: new IndexedDBKeyStorage(),
  * });
- *
- * console.log(result.thumbnail); // s3://my-bucket/output/thumb.png
  * ```
  */
 
@@ -50,13 +48,16 @@ export {
   AwpAuthError,
   type AwpAuthOptions,
   type AwpKeyPair,
-  // Key storage implementations
-  FileKeyStorage,
+  type BuildAuthUrlParams,
   // Crypto utilities
   generateKeyPair,
   type KeyStorage,
-  LocalStorageKeyStorage,
+  // Key storage implementations (in-memory only, for testing)
   MemoryKeyStorage,
+  type PollAuthStatusOptions,
+  type PollAuthStatusResult,
+  // Standalone poll function
+  pollAuthStatus,
   type SignedHeaders,
   type StoredKeyData,
   signRequest,

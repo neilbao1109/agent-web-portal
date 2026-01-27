@@ -3,9 +3,19 @@
  *
  * Provides keypair-based authentication for AWP Client.
  *
+ * Platform-specific storage implementations are in separate packages:
+ * - @agent-web-portal/client-nodejs: FileKeyStorage
+ * - @agent-web-portal/client-browser: IndexedDBKeyStorage, LocalStorageKeyStorage
+ *
  * @example
  * ```typescript
- * import { AwpAuth, FileKeyStorage } from "@agent-web-portal/client";
+ * // For Node.js
+ * import { AwpAuth } from "@agent-web-portal/client";
+ * import { FileKeyStorage } from "@agent-web-portal/client-nodejs";
+ *
+ * // For Browser
+ * import { AwpAuth } from "@agent-web-portal/client";
+ * import { IndexedDBKeyStorage } from "@agent-web-portal/client-browser";
  *
  * const auth = new AwpAuth({
  *   clientName: "My AI Agent",
@@ -22,7 +32,7 @@
  */
 
 // Main auth class
-export { AwpAuth, AwpAuthError } from "./auth.ts";
+export { AwpAuth, AwpAuthError, pollAuthStatus } from "./auth.ts";
 
 // Crypto utilities (for advanced usage)
 export {
@@ -35,14 +45,8 @@ export {
   signRequest,
 } from "./crypto.ts";
 
-// Key storage implementations
-export {
-  FileKeyStorage,
-  type FileKeyStorageOptions,
-  LocalStorageKeyStorage,
-  type LocalStorageKeyStorageOptions,
-  MemoryKeyStorage,
-} from "./storage.ts";
+// Key storage implementations (in-memory only, for testing)
+export { MemoryKeyStorage } from "./storage.ts";
 
 // Types
 export type {
@@ -52,7 +56,10 @@ export type {
   AuthInitResponse,
   AwpAuthOptions,
   AwpKeyPair,
+  BuildAuthUrlParams,
   KeyStorage,
+  PollAuthStatusOptions,
+  PollAuthStatusResult,
   SignedHeaders,
   StoredKeyData,
 } from "./types.ts";

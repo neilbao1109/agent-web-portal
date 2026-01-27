@@ -185,3 +185,47 @@ export interface AwpAuthOptions {
    */
   fetch?: typeof fetch;
 }
+
+// ============================================================================
+// Poll Auth Status Options
+// ============================================================================
+
+/**
+ * Options for polling auth status
+ */
+export interface PollAuthStatusOptions {
+  /** Polling interval in milliseconds */
+  interval: number;
+  /** Timeout in milliseconds (optional, defaults to expiresAt) */
+  timeout?: number;
+  /** AbortSignal to cancel polling */
+  signal?: AbortSignal;
+}
+
+/**
+ * Result of polling auth status
+ */
+export interface PollAuthStatusResult {
+  /** Whether authorization was successful */
+  authorized: boolean;
+  /** When the authorization expires (Unix timestamp in ms) */
+  expiresAt?: number;
+}
+
+// ============================================================================
+// Auth URL Builder
+// ============================================================================
+
+/**
+ * Parameters for building auth URL
+ */
+export interface BuildAuthUrlParams {
+  /** Server endpoint base URL */
+  endpoint: string;
+  /** Public key in base64url format */
+  pubkey: string;
+  /** Client name */
+  clientName: string;
+  /** Auth init endpoint path (default: /auth/init) */
+  authInitPath?: string;
+}

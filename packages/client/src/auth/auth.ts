@@ -21,6 +21,8 @@ import type {
   AwpAuthOptions,
   AwpKeyPair,
   KeyStorage,
+  PollAuthStatusOptions,
+  PollAuthStatusResult,
   SignedHeaders,
   StoredKeyData,
 } from "./types.ts";
@@ -46,6 +48,78 @@ export class AwpAuthError extends Error {
     super(message);
     this.name = "AwpAuthError";
   }
+}
+
+// ============================================================================
+// Standalone Poll Function
+// ============================================================================
+
+/**
+ * Poll auth status endpoint until authorized or timeout/abort
+ *
+ * This is a standalone function that can be used independently of AwpAuth,
+ * useful for browser clients that need more control over the polling process.
+ *
+ * @example
+ * ```typescript
+ * const result = await pollAuthStatus(
+ *   "https://example.com/auth/status?pubkey=xxx",
+ *   {
+ *     interval: 10000, // 10 seconds
+ *     timeout: 300000, // 5 minutes
+ *   }
+ * );
+ *
+ * if (result.authorized) {
+ *   console.log("Authorized! Expires at:", result.expiresAt);
+ * }
+ * ```
+ */
+export async function pollAuthStatus(
+  statusUrl: string,
+  options: PollAuthStatusOptions,
+  fetchFn: typeof fetch = fetch
+): Promise<PollAuthStatusResult> {
+  const { interval, timeout, signal } = options;
+  const startTime = Date.now();
+  const timeoutMs = timeout ?? Number.POSITIVE_INFINITY;
+
+  while (Date.now() - startTime < timeoutMs) {
+    // Check if aborted
+    if (signal?.aborted) {
+      return { authorized: false };
+    }
+
+    try {
+      const response = await fetchFn(statusUrl, { signal });
+      if (response.ok) {
+        const data = (await response.json()) as { authorized: boolean; expires_at?: number };
+        if (data.authorized) {
+          return {
+            authorized: true,
+            expiresAt: data.expires_at,
+          };
+        }
+      }
+    } catch {
+      // If aborted, return immediately
+      if (signal?.aborted) {
+        return { authorized: false };
+      }
+      // Ignore other fetch errors, continue polling
+    }
+
+    // Wait before next poll
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(resolve, interval);
+      signal?.addEventListener("abort", () => {
+        clearTimeout(timeoutId);
+        resolve();
+      });
+    });
+  }
+
+  return { authorized: false };
 }
 
 // ============================================================================
