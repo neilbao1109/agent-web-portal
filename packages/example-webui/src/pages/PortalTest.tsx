@@ -1355,7 +1355,7 @@ export default function PortalTest() {
                             variant="outlined"
                             size="small"
                             startIcon={<DownloadIcon />}
-                            href={`${API_BASE}/api/skills/${skill.url.replace('/skills/', '')}/download`}
+                            href={`${API_BASE}${skill.url}`}
                             download
                           >
                             Download
