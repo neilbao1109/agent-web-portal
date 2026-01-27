@@ -63,4 +63,24 @@ export const jsonataPortal = createAgentWebPortal({
       }
     },
   })
+  .registerSkills({
+    "automata-transition": {
+      url: "/api/awp/jsonata/skills/automata-transition/download",
+      frontmatter: {
+        name: "Automata State Transition",
+        description: "Compute finite automaton state transitions using JSONata expressions",
+        version: "1.0.0",
+        "allowed-tools": ["jsonata_eval"],
+      },
+    },
+    "statistics": {
+      url: "/api/awp/jsonata/skills/statistics/download",
+      frontmatter: {
+        name: "Statistics Calculator",
+        description: "Perform statistical calculations on record lists using JSONata",
+        version: "1.0.0",
+        "allowed-tools": ["jsonata_eval"],
+      },
+    },
+  })
   .build();

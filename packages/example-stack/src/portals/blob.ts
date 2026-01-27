@@ -546,4 +546,15 @@ export const blobPortal = createAgentWebPortal({
       };
     },
   })
+  .registerSkills({
+    "image-gallery": {
+      url: "/api/awp/blob/skills/image-gallery/download",
+      frontmatter: {
+        name: "Image Gallery",
+        description: "Upload, retrieve, and manage images in cloud storage",
+        version: "1.0.0",
+        "allowed-tools": ["put_image", "get_image", "list_images"],
+      },
+    },
+  })
   .build();
