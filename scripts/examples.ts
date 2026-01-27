@@ -107,3 +107,6 @@ Usage:
   bun run scripts/examples.ts webui --url <x>  # Start webui with custom API
 
   bun run scripts/examples.ts deploy           # Deploy both API and WebUI to AWS
+`);
+	process.exit(1);
+}
