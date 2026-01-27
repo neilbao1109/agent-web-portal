@@ -9,6 +9,8 @@
     "test:e2e": "turbo run test:e2e",
     "examples:api": "bun run scripts/examples.ts api",
     "examples:webui": "bun run scripts/examples.ts webui",
+    "examples:deploy:api": "bun run --cwd packages/example-stack deploy",
+    "examples:deploy:webui": "bun run --cwd packages/example-webui deploy",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
