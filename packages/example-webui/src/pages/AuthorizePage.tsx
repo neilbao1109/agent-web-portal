@@ -81,7 +81,7 @@ export default function AuthorizePage() {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !user && pubkey) {
-      const returnUrl = encodeURIComponent(`/auth/page?pubkey=${encodeURIComponent(pubkey)}`);
+      const returnUrl = encodeURIComponent(`/authorize?pubkey=${encodeURIComponent(pubkey)}`);
       navigate(`/login?returnUrl=${returnUrl}`, { replace: true });
     }
   }, [user, authLoading, navigate, pubkey]);

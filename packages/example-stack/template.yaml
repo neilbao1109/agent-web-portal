@@ -283,14 +283,6 @@ Resources:
               - POST
               - PATCH
               - DELETE
-            AllowedMethods:
-              - GET
-              - HEAD
-              - OPTIONS
-              - PUT
-              - POST
-              - PATCH
-              - DELETE
         
         # SPA fallback - return index.html for 403/404
         CustomErrorResponses:

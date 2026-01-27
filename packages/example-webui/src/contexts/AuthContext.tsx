@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/me`, {
+      const response = await fetch(`${API_BASE}/api/auth/me`, {
         credentials: 'include',
       });
       const data = await response.json();
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/api/login`, {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch(`${API_BASE}/api/logout`, {
+      await fetch(`${API_BASE}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

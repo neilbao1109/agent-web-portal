@@ -237,14 +237,14 @@ export function getAuthPageHtml(
       }
       
       try {
-        const response = await fetch('/auth/complete', {
+        const response = await fetch('/api/auth/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         
         if (response.ok) {
-          window.location.href = '/auth/success';
+          window.location.href = '/api/auth/success';
         } else {
           const data = await response.json();
           alert(data.error_description || 'Authorization failed');
