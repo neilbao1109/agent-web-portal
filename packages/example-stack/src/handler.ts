@@ -197,6 +197,106 @@ async function responseToApiGateway(response: Response): Promise<APIGatewayProxy
 }
 
 // =============================================================================
+// Skills Manifest Helper (reads from S3 skills/{portal}/skills-manifest.json)
+// =============================================================================
+
+async function getSkillsManifestFromS3(portalName: string): Promise<Record<string, unknown>> {
+  const bucketName = process.env.SKILLS_BUCKET || process.env.BLOB_BUCKET;
+  if (!bucketName) {
+    return {};
+  }
+
+  try {
+    const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const s3 = new S3Client({});
+
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucketName,
+        Key: `skills/${portalName}/skills-manifest.json`,
+      })
+    );
+
+    if (!response.Body) {
+      return {};
+    }
+
+    const content = await response.Body.transformToString();
+    const skills = JSON.parse(content) as Array<{
+      id: string;
+      url: string;
+      zipUrl: string;
+      frontmatter: Record<string, unknown>;
+    }>;
+
+    // Convert array to object format for MCP skills/list response
+    const result: Record<string, unknown> = {};
+    for (const skill of skills) {
+      result[skill.id] = {
+        url: skill.zipUrl,
+        frontmatter: skill.frontmatter,
+      };
+    }
+    return result;
+  } catch (error) {
+    if ((error as { name?: string }).name === "NoSuchKey") {
+      return {};
+    }
+    console.error("Failed to get skills manifest from S3:", error);
+    return {};
+  }
+}
+
+/**
+ * Handle portal MCP request with skills/list interception
+ * Intercepts skills/list to return skills from S3 manifest
+ */
+async function handlePortalMcpRequest(
+  event: APIGatewayProxyEvent,
+  portal: { handleRequest: (req: Request) => Promise<Response> },
+  portalName: string,
+  baseUrl: string,
+  corsHeaders: Record<string, string>
+): Promise<APIGatewayProxyResult> {
+  const httpMethod =
+    event.httpMethod ??
+    (event as unknown as { requestContext?: { http?: { method?: string } } }).requestContext?.http
+      ?.method ??
+    "GET";
+
+  // Check if this is a skills/list request
+  if (httpMethod === "POST" && event.body) {
+    try {
+      const body = event.isBase64Encoded
+        ? Buffer.from(event.body, "base64").toString("utf-8")
+        : event.body;
+      const jsonBody = JSON.parse(body);
+
+      if (jsonBody && typeof jsonBody === "object" && jsonBody.method === "skills/list") {
+        // Return skills from S3 manifest
+        const skills = await getSkillsManifestFromS3(portalName);
+        return {
+          statusCode: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: jsonBody.id,
+            result: skills,
+          }),
+        };
+      }
+    } catch {
+      // Not JSON or parsing failed, continue to portal handler
+    }
+  }
+
+  // Forward to portal handler for all other requests
+  const req = createWebRequest(event, baseUrl);
+  const res = await portal.handleRequest(req);
+  return responseToApiGateway(res);
+}
+
+// =============================================================================
 // Form Data Parser
 // =============================================================================
 
@@ -583,30 +683,22 @@ export async function handler(
 
     // Basic portal - /api/awp/basic
     if (path === "/api/awp/basic" || path === "/api/awp/basic/mcp") {
-      const req = createWebRequest(event, baseUrl);
-      const res = await basicPortal.handleRequest(req);
-      return responseToApiGateway(res);
+      return handlePortalMcpRequest(event, basicPortal, "basic", baseUrl, corsHeaders);
     }
 
     // E-commerce portal - /api/awp/ecommerce
     if (path === "/api/awp/ecommerce" || path === "/api/awp/ecommerce/mcp") {
-      const req = createWebRequest(event, baseUrl);
-      const res = await ecommercePortal.handleRequest(req);
-      return responseToApiGateway(res);
+      return handlePortalMcpRequest(event, ecommercePortal, "ecommerce", baseUrl, corsHeaders);
     }
 
     // JSONata portal - /api/awp/jsonata
     if (path === "/api/awp/jsonata" || path === "/api/awp/jsonata/mcp") {
-      const req = createWebRequest(event, baseUrl);
-      const res = await jsonataPortal.handleRequest(req);
-      return responseToApiGateway(res);
+      return handlePortalMcpRequest(event, jsonataPortal, "jsonata", baseUrl, corsHeaders);
     }
 
     // Blob portal MCP endpoint - /api/awp/blob
     if (path === "/api/awp/blob" || path === "/api/awp/blob/mcp") {
-      const req = createWebRequest(event, baseUrl);
-      const res = await blobPortal.handleRequest(req);
-      return responseToApiGateway(res);
+      return handlePortalMcpRequest(event, blobPortal, "blob", baseUrl, corsHeaders);
     }
 
     // =========================================================================
@@ -1082,9 +1174,7 @@ export async function handler(
         };
       }
 
-      const req = createWebRequest(event, baseUrl);
-      const res = await authPortal.handleRequest(req);
-      return responseToApiGateway(res);
+      return handlePortalMcpRequest(event, authPortal, "secure", baseUrl, corsHeaders);
     }
 
     // Root API route - show available portals

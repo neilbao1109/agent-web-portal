@@ -53,15 +53,4 @@ export const authPortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkills({
-    "authenticated-greeting": {
-      url: "/api/awp/secure/skills/authenticated-greeting/download",
-      frontmatter: {
-        name: "Authenticated Greeting",
-        description: "Secure greeting service that requires AWP authentication",
-        version: "1.0.0",
-        "allowed-tools": ["secure_greet"],
-      },
-    },
-  })
   .build();

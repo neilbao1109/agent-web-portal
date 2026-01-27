@@ -53,15 +53,4 @@ export const basicPortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkills({
-    "multilingual-greeting": {
-      url: "/api/awp/basic/skills/multilingual-greeting/download",
-      frontmatter: {
-        name: "Multilingual Greeting",
-        description: "Generate personalized greetings in multiple languages",
-        version: "1.0.0",
-        "allowed-tools": ["greet"],
-      },
-    },
-  })
   .build();

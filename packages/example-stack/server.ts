@@ -126,6 +126,79 @@ const authMiddleware = createAwpAuthMiddleware({
 });
 
 // =============================================================================
+// Skills Manifest Helper (reads from dist/skills/{portal}/skills-manifest.json)
+// =============================================================================
+
+async function getSkillsManifest(portalName: string): Promise<Record<string, unknown>> {
+  const fs = await import("node:fs");
+  const currentDir = import.meta.dir;
+  const manifestPath = `${currentDir}/dist/skills/${portalName}/skills-manifest.json`;
+
+  try {
+    if (!fs.existsSync(manifestPath)) {
+      return {};
+    }
+    const content = fs.readFileSync(manifestPath, "utf-8");
+    const skills = JSON.parse(content) as Array<{
+      id: string;
+      url: string;
+      zipUrl: string;
+      frontmatter: Record<string, unknown>;
+    }>;
+
+    // Convert array to object format for MCP skills/list response
+    const result: Record<string, unknown> = {};
+    for (const skill of skills) {
+      result[skill.id] = {
+        url: skill.zipUrl,
+        frontmatter: skill.frontmatter,
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Handle portal MCP request with skills/list interception
+ * Intercepts skills/list to return skills from manifest file
+ */
+async function handlePortalRequest(
+  req: Request,
+  portal: { handleRequest: (req: Request) => Promise<Response> },
+  portalName: string
+): Promise<Response> {
+  // Check if this is a skills/list request
+  if (req.method === "POST") {
+    try {
+      const clonedReq = req.clone();
+      const body = await clonedReq.json();
+
+      if (body && typeof body === "object" && "method" in body && body.method === "skills/list") {
+        // Return skills from manifest file
+        const skills = await getSkillsManifest(portalName);
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: skills,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    } catch {
+      // Not JSON or parsing failed, continue to portal handler
+    }
+  }
+
+  // Forward to portal handler for all other requests
+  return portal.handleRequest(req);
+}
+
+// =============================================================================
 // Request Handler
 // =============================================================================
 
@@ -162,22 +235,22 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // Basic portal - /api/awp/basic
   if (pathname === "/api/awp/basic" || pathname === "/api/awp/basic/mcp") {
-    return basicPortal.handleRequest(req);
+    return handlePortalRequest(req, basicPortal, "basic");
   }
 
   // E-commerce portal - /api/awp/ecommerce
   if (pathname === "/api/awp/ecommerce" || pathname === "/api/awp/ecommerce/mcp") {
-    return ecommercePortal.handleRequest(req);
+    return handlePortalRequest(req, ecommercePortal, "ecommerce");
   }
 
   // JSONata portal - /api/awp/jsonata
   if (pathname === "/api/awp/jsonata" || pathname === "/api/awp/jsonata/mcp") {
-    return jsonataPortal.handleRequest(req);
+    return handlePortalRequest(req, jsonataPortal, "jsonata");
   }
 
   // Blob portal - /api/awp/blob
   if (pathname === "/api/awp/blob" || pathname === "/api/awp/blob/mcp") {
-    return blobPortal.handleRequest(req);
+    return handlePortalRequest(req, blobPortal, "blob");
   }
 
   // ==========================================================================
@@ -773,7 +846,7 @@ async function handleRequest(req: Request): Promise<Response> {
         )
       );
     }
-    return authPortal.handleRequest(req);
+    return handlePortalRequest(req, authPortal, "secure");
   }
 
   // API info

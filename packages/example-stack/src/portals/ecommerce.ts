@@ -143,15 +143,4 @@ export const ecommercePortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkills({
-    "shopping-flow": {
-      url: "/api/awp/ecommerce/skills/shopping-flow/download",
-      frontmatter: {
-        name: "Shopping Flow",
-        description: "Complete e-commerce shopping workflow from product search to checkout",
-        version: "1.0.0",
-        "allowed-tools": ["search_products", "manage_cart", "checkout"],
-      },
-    },
-  })
   .build();
