@@ -1,7 +1,9 @@
 {
   "name": "agent-web-portal-monorepo",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -9,6 +11,7 @@
     "test:e2e": "turbo run test:e2e",
     "examples:api": "bun run scripts/examples.ts api",
     "examples:webui": "bun run scripts/examples.ts webui",
+    "examples:deploy": "bun run scripts/examples.ts deploy",
     "examples:deploy:api": "bun run --cwd packages/example-stack deploy",
     "examples:deploy:webui": "bun run --cwd packages/example-webui deploy",
     "typecheck": "turbo run typecheck",
