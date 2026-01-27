@@ -1,10 +1,9 @@
 import type { ZodSchema } from "zod";
-import { extractBlobFields, getBlobMetadata, isBlob } from "./blob.ts";
+import { extractBlobFields } from "./blob.ts";
 import type { ToolHandlerContext } from "./define-tool.ts";
 import type {
   AgentWebPortalConfig,
   BlobContext,
-  BlobFieldMetadata,
   McpToolAwpExtension,
   McpToolSchema,
   McpToolsListResponse,
@@ -240,56 +239,13 @@ export class ToolRegistry {
   }
 
   /**
-   * Extract blob field metadata from a Zod schema
-   */
-  private extractBlobMetadata(schema: ZodSchema): Record<string, BlobFieldMetadata> {
-    const metadata: Record<string, BlobFieldMetadata> = {};
-    const def = (schema as any)._def;
-
-    if (def?.typeName !== "ZodObject") {
-      return metadata;
-    }
-
-    const shape = def.shape();
-    for (const [key, value] of Object.entries(shape)) {
-      // Check direct blob
-      if (isBlob(value)) {
-        const blobMeta = getBlobMetadata(value);
-        if (blobMeta) {
-          metadata[key] = {
-            ...(blobMeta.mimeType && { mimeType: blobMeta.mimeType }),
-            ...(blobMeta.maxSize && { maxSize: blobMeta.maxSize }),
-            ...(blobMeta.description && { description: blobMeta.description }),
-          };
-        } else {
-          metadata[key] = {};
-        }
-        continue;
-      }
-
-      // Check wrapped in ZodOptional or ZodDefault
-      const innerDef = (value as any)?._def;
-      if (innerDef?.typeName === "ZodOptional" || innerDef?.typeName === "ZodDefault") {
-        if (isBlob(innerDef.innerType)) {
-          const blobMeta = getBlobMetadata(innerDef.innerType);
-          if (blobMeta) {
-            metadata[key] = {
-              ...(blobMeta.mimeType && { mimeType: blobMeta.mimeType }),
-              ...(blobMeta.maxSize && { maxSize: blobMeta.maxSize }),
-              ...(blobMeta.description && { description: blobMeta.description }),
-            };
-          } else {
-            metadata[key] = {};
-          }
-        }
-      }
-    }
-
-    return metadata;
-  }
-
-  /**
    * Convert a tool to MCP schema format
+   * 
+   * For tools with output blobs, the output blob fields are added to the inputSchema
+   * so that generic MCP clients can see they need to provide presigned writable URLs.
+   * AWP-aware Agent runtimes will use _awp.blob.output to strip these fields from
+   * the schema before presenting to the LLM.
+   * 
    * @param name - Tool name
    */
   toMcpSchema(name: string): McpToolSchema | null {
@@ -298,24 +254,69 @@ export class ToolRegistry {
       return null;
     }
 
-    // Build the base schema
+    // Build the base inputSchema from the tool's input schema
+    const inputSchema = zodToJsonSchema(tool.inputSchema) as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    // For output blobs, we need to add them to the inputSchema as parameters
+    // that require presigned writable URLs. This makes the tool compatible with
+    // generic MCP clients that don't understand AWP blob extensions.
+    if (tool.outputBlobs.length > 0) {
+      const outputBlobSchema = zodToJsonSchema(tool.outputSchema) as {
+        type?: string;
+        properties?: Record<string, unknown>;
+        required?: string[];
+      };
+
+      // Ensure properties object exists
+      if (!inputSchema.properties) {
+        inputSchema.properties = {};
+      }
+
+      // Add output blob fields to inputSchema with description indicating they need writable URLs
+      for (const blobField of tool.outputBlobs) {
+        if (outputBlobSchema.properties?.[blobField]) {
+          inputSchema.properties[blobField] = {
+            type: "string",
+            format: "uri",
+            description: `Presigned writable URL for output blob: ${blobField}`,
+          };
+        }
+      }
+
+      // Add output blob fields to required array
+      if (!inputSchema.required) {
+        inputSchema.required = [];
+      }
+      for (const blobField of tool.outputBlobs) {
+        if (!inputSchema.required.includes(blobField)) {
+          inputSchema.required.push(blobField);
+        }
+      }
+    }
+
+    // Build the schema object
     const schema: McpToolSchema = {
       name,
       description: tool.description,
-      inputSchema: zodToJsonSchema(tool.inputSchema),
+      inputSchema,
     };
 
-    // Extract blob metadata and add to _awp if there are any blobs
+    // Add simplified _awp.blob extension if there are any blobs
+    // This is just a list of field names for AWP-aware runtimes
     const hasBlobs = tool.inputBlobs.length > 0 || tool.outputBlobs.length > 0;
     if (hasBlobs) {
-      const awp: McpToolAwpExtension = { blobs: {} };
+      const awp: McpToolAwpExtension = { blob: {} };
 
       if (tool.inputBlobs.length > 0) {
-        awp.blobs!.input = this.extractBlobMetadata(tool.inputSchema);
+        awp.blob!.input = [...tool.inputBlobs];
       }
 
       if (tool.outputBlobs.length > 0) {
-        awp.blobs!.output = this.extractBlobMetadata(tool.outputSchema);
+        awp.blob!.output = [...tool.outputBlobs];
       }
 
       schema._awp = awp;

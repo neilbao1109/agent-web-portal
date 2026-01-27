@@ -69,7 +69,12 @@ export {
   type ToolBlobSchema,
 } from "./blob-interceptor.ts";
 // Client exports
-export { AwpClient, type AwpClientOptions } from "./client.ts";
+export {
+  AwpClient,
+  type AwpClientOptions,
+  type AwpToolSchema,
+  type ToolCallResult,
+} from "./client.ts";
 export { S3StorageProvider, type S3StorageProviderOptions } from "./storage/s3.ts";
 // Storage provider exports
 export type { PresignedUrlPair, StorageProvider } from "./storage/types.ts";

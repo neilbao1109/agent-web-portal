@@ -50,7 +50,8 @@ const client = new AwpClient({
 
 // 调用 Tool
 const result = await client.callTool("greet", { name: "World" });
-console.log(result.data); // { message: "Hello, World!" }
+console.log(result.output); // { message: "Hello, World!" }
+console.log(result.blobs);  // {} (无 blob 输出)
 ```
 
 ## 认证机制
@@ -158,18 +159,64 @@ const auth = new AwpAuth({
 
 ## Blob 处理
 
-客户端自动处理 Blob 字段：
+客户端自动处理 Blob 字段，将复杂的 presigned URL 管理对调用方透明化：
+
+### 输入/输出格式转换
+
+假设有一个 Tool，其服务端定义如下：
+- **输入**: `{ foo: string, bar: string }` 其中 `foo` 是 input blob，`bar` 是 output blob
+- **输出**: `{ xyz: number }`
+
+客户端会进行如下转换：
+
+**调用方看到的接口**：
+```typescript
+// listTools() 返回的 inputSchema 不包含 output blob 字段
+const { tools } = await client.listTools();
+// tools[0].inputSchema = { foo: string }  // bar 被移除了
+// tools[0].inputBlobFields = ['foo']      // 标记 foo 需要 s3:// URI
+// tools[0].outputBlobFields = ['bar']     // 标记 bar 会出现在 result.blobs 中
+
+// 调用时只需提供 input blob 字段
+const result = await client.callTool("process-image", {
+  foo: "s3://my-bucket/input/image.png",  // Input blob (s3:// URI)
+});
+
+// 结果分为 output 和 blobs 两部分
+console.log(result.output); // { xyz: 123 }
+console.log(result.blobs);  // { bar: "s3://my-bucket/output/bar-xxx.png" }
+```
+
+**客户端内部传给 AWP Tool 的内容**：
+```typescript
+// 客户端自动添加 output blob 的 presigned URL
+{
+  foo: "https://...presigned-get-url...",  // Input blob -> presigned GET URL
+  bar: "https://...presigned-put-url...",  // Output blob -> presigned PUT URL (自动生成)
+}
+```
+
+### 使用示例
 
 ```typescript
+// 创建支持 Blob 的客户端
+const client = new AwpClient({
+  endpoint: "https://my-awp-server.com/mcp",
+  storage: new S3StorageProvider({
+    region: "us-east-1",
+    bucket: "my-bucket",
+  }),
+});
+
 // 调用带 Blob 的 Tool
 const result = await client.callTool("process-document", {
   document: "s3://my-bucket/input/doc.pdf",  // 输入 Blob URI
   options: { quality: 80 },
 });
 
-// 结果中的 Blob 字段自动填充为永久 URI
-console.log(result.data.thumbnail); // "s3://my-bucket/output/thumb.png"
-console.log(result.data.metadata);  // { pageCount: 10 }
+// 结果自动分离
+console.log(result.output.metadata);  // { pageCount: 10 }
+console.log(result.blobs.thumbnail);  // "s3://my-bucket/output/thumb.png"
 ```
 
 ## API
@@ -188,10 +235,33 @@ const client = new AwpClient({
 
 // 方法
 await client.initialize();                    // 初始化连接
-await client.listTools();                     // 列出所有 Tools
-await client.callTool(name, args, schema?);   // 调用 Tool
+await client.listTools();                     // 列出所有 Tools (output blob 已从 inputSchema 移除)
+await client.listToolsRaw();                  // 列出原始 Tools (服务端返回的格式)
+await client.callTool(name, args, schema?);   // 调用 Tool，返回 { output, blobs, isError }
 await client.getToolBlobSchema(name);         // 获取 Tool 的 Blob Schema
 client.setToolBlobSchema(name, schema);       // 设置 Tool 的 Blob Schema
+```
+
+### `ToolCallResult`
+
+```typescript
+interface ToolCallResult<TOutput, TBlobs> {
+  output: TOutput;            // 非 Blob 输出字段
+  blobs: TBlobs;              // Blob 输出字段 (s3:// URIs)
+  isError?: boolean;          // 是否出错
+}
+```
+
+### `AwpToolSchema`
+
+```typescript
+interface AwpToolSchema {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;  // Output blob 字段已移除
+  inputBlobFields: string[];             // Input blob 字段名
+  outputBlobFields: string[];            // Output blob 字段名
+}
 ```
 
 ### `AwpAuth`

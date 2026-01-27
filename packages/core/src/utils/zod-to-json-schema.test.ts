@@ -24,7 +24,7 @@ describe("zodToJsonSchema with blob support", () => {
     });
     const jsonSchema = zodToJsonSchema(schema);
 
-    // Options are not included in JSON Schema - they go to _awp.blobs
+    // Options are not included in JSON Schema - they go to _awp.blob
     expect(jsonSchema).toEqual({
       type: "string",
       format: "uri",

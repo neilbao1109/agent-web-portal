@@ -889,8 +889,9 @@ const result = await client.callTool("process-document", {
   options: { quality: 80 },
 });
 
-console.log(result.data.thumbnail); // "s3://my-bucket/output/thumb.png"
-console.log(result.data.metadata);  // { pageCount: 10 }
+// 结果分为 output 和 blobs 两部分
+console.log(result.output.metadata);  // { pageCount: 10 }
+console.log(result.blobs.thumbnail);  // "s3://my-bucket/output/thumb.png"
 ```
 
 ### 8.5 Blob 字段在 tools/list 中的表示
@@ -913,32 +914,31 @@ AWP 将 blob 信息与 JSON Schema 分离，放在 `_awp` 扩展字段中，以�
         "properties": {
           "quality": { "type": "number" }
         }
+      },
+      "thumbnail": {
+        "type": "string",
+        "format": "uri",
+        "description": "Presigned writable URL for output blob: thumbnail"
       }
-    }
+    },
+    "required": ["document", "thumbnail"]
   },
   "_awp": {
-    "blobs": {
-      "input": {
-        "document": {
-          "mimeType": "application/pdf",
-          "maxSize": 10485760
-        }
-      },
-      "output": {
-        "thumbnail": {
-          "mimeType": "image/png"
-        }
-      }
+    "blob": {
+      "input": ["document"],
+      "output": ["thumbnail"]
     }
   }
 }
 ```
 
-**设计优势**：
+**设计说明**：
 
-- `inputSchema` 保持标准 JSON Schema 格式，兼容所有 MCP 客户端
-- Blob 元数据放在独立的 `_awp.blobs` 字段，不支持 AWP 的客户端可以忽略
-- Client SDK 通过识别 `_awp.blobs` 来自动生成预签名 URL
+- `inputSchema` 包含所有参数，包括 output blob 字段（`thumbnail`），这样普通 MCP 客户端可以看到需要提供 presigned writable URL
+- `_awp.blob.input` 列出 input blob 字段名（需要 presigned GET URL）
+- `_awp.blob.output` 列出 output blob 字段名（需要 presigned PUT URL）
+- 支持 AWP 的 Agent runtime 会根据 `_awp.blob.output` 在推送 schema 给 LLM 时移除这些字段
+- Client SDK 会自动处理 presigned URL 的生成和结果格式转换
 
 ---
 

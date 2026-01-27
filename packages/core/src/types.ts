@@ -153,14 +153,19 @@ export type JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse;
 /**
  * AWP extension data for a tool
  * Kept separate from inputSchema to avoid polluting JSON Schema
+ * 
+ * Note: The inputSchema in tools/list includes ALL parameters (including output blob fields)
+ * so that generic MCP clients can see they need to provide presigned writable URLs.
+ * AWP-aware Agent runtimes will use the _awp.blob.output list to strip those fields
+ * from the schema before presenting to the LLM.
  */
 export interface McpToolAwpExtension {
-  /** Blob field metadata (separated from JSON Schema for compatibility) */
-  blobs?: {
-    /** Input blob fields with their metadata */
-    input?: Record<string, BlobFieldMetadata>;
-    /** Output blob fields with their metadata */
-    output?: Record<string, BlobFieldMetadata>;
+  /** Simple blob field lists - just the parameter names */
+  blob?: {
+    /** Input blob parameter names (require presigned readable URLs) */
+    input?: string[];
+    /** Output blob parameter names (require presigned writable URLs, stripped from LLM schema) */
+    output?: string[];
   };
 }
 

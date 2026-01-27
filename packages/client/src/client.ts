@@ -34,13 +34,39 @@ export interface AwpClientOptions {
 }
 
 /**
- * Tool call result
+ * Tool call result with separated output and blobs
+ * 
+ * For tools with output blobs:
+ * - `output` contains the non-blob output fields
+ * - `blobs` contains the blob field values (permanent URIs like s3://...)
+ * 
+ * For tools without output blobs:
+ * - `output` contains all output fields
+ * - `blobs` is an empty object
  */
-export interface ToolCallResult<T = unknown> {
-  /** The result data */
-  data: T;
+export interface ToolCallResult<TOutput = unknown, TBlobs = Record<string, string>> {
+  /** The non-blob output data */
+  output: TOutput;
+  /** The blob output URIs (permanent storage URIs) */
+  blobs: TBlobs;
   /** Whether the call resulted in an error */
   isError?: boolean;
+}
+
+/**
+ * Tool schema with AWP blob handling applied
+ * - inputSchema has output blob fields removed (they're handled by the client)
+ * - outputBlobFields lists the fields that will appear in result.blobs
+ */
+export interface AwpToolSchema {
+  name: string;
+  description?: string;
+  /** Input schema with output blob fields removed */
+  inputSchema: Record<string, unknown>;
+  /** Output blob field names (will appear in result.blobs) */
+  outputBlobFields: string[];
+  /** Input blob field names (require s3:// URIs in args) */
+  inputBlobFields: string[];
 }
 
 /**
@@ -58,7 +84,7 @@ interface CachedToolSchema {
  * blob handling. The client:
  *
  * 1. Fetches tool schemas from the server
- * 2. Identifies blob fields from the _awp.blobs extension
+ * 2. Identifies blob fields from the _awp.blob extension
  * 3. Generates presigned URLs for input and output blobs
  * 4. Sends the request with blob context
  * 5. Returns results with permanent URIs
@@ -79,7 +105,8 @@ interface CachedToolSchema {
  *   options: { quality: 80 },
  * });
  *
- * console.log(result.data.thumbnail); // s3://my-bucket/output/thumb.png
+ * console.log(result.output.metadata); // { pageCount: 10 }
+ * console.log(result.blobs.thumbnail); // s3://my-bucket/output/thumb.png
  * ```
  */
 export class AwpClient {
@@ -193,10 +220,11 @@ export class AwpClient {
     awp: McpToolAwpExtension | undefined,
     type: "input" | "output"
   ): string[] {
-    if (!awp?.blobs?.[type]) {
+    // New simplified format: _awp.blob.input/output are string arrays
+    if (!awp?.blob?.[type]) {
       return [];
     }
-    return Object.keys(awp.blobs[type]!);
+    return [...awp.blob[type]!];
   }
 
   /**
@@ -210,7 +238,7 @@ export class AwpClient {
     const response = (await this.sendRequest("tools/list")) as McpToolsListResponse;
 
     for (const tool of response.tools) {
-      // Extract blob fields from the _awp extension (not from JSON Schema)
+      // Extract blob fields from the _awp.blob extension (simple string arrays)
       const inputBlobs = this.extractBlobFieldsFromAwp(tool._awp, "input");
       const outputBlobs = this.extractBlobFieldsFromAwp(tool._awp, "output");
 
@@ -253,16 +281,26 @@ export class AwpClient {
   /**
    * Call a tool with automatic blob handling
    *
+   * The caller provides:
+   * - args: Tool arguments (without output blob fields, those are handled automatically)
+   *   - Input blob fields should contain permanent URIs (e.g., s3://bucket/key)
+   *
+   * The client:
+   * - Generates presigned GET URLs for input blobs
+   * - Generates presigned PUT URLs for output blobs
+   * - Sends the request with the full arguments including output blob presigned URLs
+   * - Returns the result split into { output, blobs }
+   *
    * @param name - Tool name
-   * @param args - Tool arguments
+   * @param args - Tool arguments (input blob fields contain s3:// URIs)
    * @param blobSchema - Optional blob schema override
-   * @returns The tool result
+   * @returns The tool result with output and blobs separated
    */
-  async callTool<T = unknown>(
+  async callTool<TOutput = unknown, TBlobs = Record<string, string>>(
     name: string,
     args: Record<string, unknown>,
     blobSchema?: ToolBlobSchema
-  ): Promise<ToolCallResult<T>> {
+  ): Promise<ToolCallResult<TOutput, TBlobs>> {
     await this.ensureSchemasFetched();
 
     // Get blob schema
@@ -279,10 +317,20 @@ export class AwpClient {
       blobContext = await this.blobInterceptor.prepareBlobContext(args, effectiveBlobSchema);
     }
 
+    // Build the full arguments to send to the AWP tool
+    // This includes the original args plus presigned URLs for output blobs
+    const fullArgs = { ...args };
+    if (blobContext && effectiveBlobSchema) {
+      // Add output blob presigned URLs to the arguments
+      for (const field of effectiveBlobSchema.outputBlobs) {
+        fullArgs[field] = blobContext.output[field];
+      }
+    }
+
     // Send the request
     const response = (await this.sendRequest("tools/call", {
       name,
-      arguments: args,
+      arguments: fullArgs,
       ...(blobContext && { _blobContext: blobContext }),
     })) as {
       content: Array<{ type: string; text?: string }>;
@@ -291,28 +339,123 @@ export class AwpClient {
 
     // Parse the result
     const textContent = response.content.find((c) => c.type === "text");
-    let data: T;
+    let rawData: Record<string, unknown>;
 
     if (textContent?.text) {
       try {
-        data = JSON.parse(textContent.text) as T;
+        rawData = JSON.parse(textContent.text) as Record<string, unknown>;
       } catch {
-        data = textContent.text as unknown as T;
+        rawData = { text: textContent.text };
       }
     } else {
-      data = undefined as unknown as T;
+      rawData = {};
+    }
+
+    // Separate output and blobs
+    const blobs: Record<string, string> = {};
+    const output: Record<string, unknown> = {};
+
+    if (effectiveBlobSchema && blobContext) {
+      // Extract output blob URIs
+      for (const field of effectiveBlobSchema.outputBlobs) {
+        // Use the permanent URI from blobContext, not the value from the response
+        blobs[field] = blobContext.outputUri[field];
+      }
+
+      // Copy non-blob fields to output
+      for (const [key, value] of Object.entries(rawData)) {
+        if (!effectiveBlobSchema.outputBlobs.includes(key)) {
+          output[key] = value;
+        }
+      }
+    } else {
+      // No blob schema, just return everything as output
+      Object.assign(output, rawData);
     }
 
     return {
-      data,
+      output: output as TOutput,
+      blobs: blobs as TBlobs,
       isError: response.isError,
     };
   }
 
   /**
-   * List available tools
+   * List available tools with AWP blob handling applied
+   * 
+   * Returns tool schemas where:
+   * - inputSchema has output blob fields removed (they're handled by the client)
+   * - inputBlobFields lists fields that require s3:// URIs
+   * - outputBlobFields lists fields that will appear in result.blobs
    */
-  async listTools(): Promise<McpToolsListResponse> {
+  async listTools(): Promise<{ tools: AwpToolSchema[] }> {
+    await this.ensureSchemasFetched();
+
+    const tools: AwpToolSchema[] = [];
+
+    for (const cached of this.toolSchemaCache.values()) {
+      const { schema, blobSchema } = cached;
+
+      // Clone the inputSchema and remove output blob fields
+      const inputSchema = this.removeOutputBlobsFromSchema(
+        schema.inputSchema,
+        blobSchema.outputBlobs
+      );
+
+      tools.push({
+        name: schema.name,
+        description: schema.description,
+        inputSchema,
+        inputBlobFields: blobSchema.inputBlobs,
+        outputBlobFields: blobSchema.outputBlobs,
+      });
+    }
+
+    return { tools };
+  }
+
+  /**
+   * Remove output blob fields from the input schema
+   * This creates a new schema without the specified fields
+   */
+  private removeOutputBlobsFromSchema(
+    schema: Record<string, unknown>,
+    outputBlobs: string[]
+  ): Record<string, unknown> {
+    if (outputBlobs.length === 0) {
+      return schema;
+    }
+
+    const newSchema = { ...schema };
+
+    // Remove from properties
+    if (newSchema.properties && typeof newSchema.properties === "object") {
+      const newProperties = { ...newSchema.properties as Record<string, unknown> };
+      for (const field of outputBlobs) {
+        delete newProperties[field];
+      }
+      newSchema.properties = newProperties;
+    }
+
+    // Remove from required array
+    if (Array.isArray(newSchema.required)) {
+      newSchema.required = newSchema.required.filter(
+        (field: string) => !outputBlobs.includes(field)
+      );
+      // Remove required if empty
+      if (newSchema.required.length === 0) {
+        delete newSchema.required;
+      }
+    }
+
+    return newSchema;
+  }
+
+  /**
+   * Get the raw MCP tools list (without AWP processing)
+   * Use this if you need the original server response
+   */
+  async listToolsRaw(): Promise<McpToolsListResponse> {
     await this.ensureSchemasFetched();
     return {
       tools: Array.from(this.toolSchemaCache.values()).map((c) => c.schema),
