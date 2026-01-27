@@ -53,15 +53,4 @@ export const basicPortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkills({
-    "greeting-assistant": {
-      url: "/api/skills/greeting-assistant/download",
-      frontmatter: {
-        name: "Greeting Assistant",
-        description: "A skill for greeting users in multiple languages",
-        version: "1.0.0",
-        "allowed-tools": ["greet"],
-      },
-    },
-  })
   .build();

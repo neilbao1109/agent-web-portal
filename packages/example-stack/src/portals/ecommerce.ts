@@ -143,27 +143,4 @@ export const ecommercePortal = createAgentWebPortal({
       };
     },
   })
-  .registerSkills({
-    "shopping-assistant": {
-      url: "/api/skills/shopping-assistant/download",
-      frontmatter: {
-        name: "Shopping Assistant",
-        description: "Complete e-commerce shopping flow",
-        version: "2.0.0",
-        "allowed-tools": ["search_products", "manage_cart", "checkout"],
-      },
-    },
-    "product-comparison": {
-      url: "/api/skills/product-comparison/download",
-      frontmatter: {
-        name: "Product Comparison",
-        description: "Compare products across sources",
-        version: "1.0.0",
-        "allowed-tools": [
-          "search_products",
-          "external_reviews:get_reviews", // Cross-MCP reference
-        ],
-      },
-    },
-  })
   .build();

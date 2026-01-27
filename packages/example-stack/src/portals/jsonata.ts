@@ -63,30 +63,4 @@ export const jsonataPortal = createAgentWebPortal({
       }
     },
   })
-  .registerSkills({
-    "automata-transition": {
-      url: "/api/skills/automata-transition/download",
-      frontmatter: {
-        name: "Automata State Transition",
-        description:
-          "Compute finite automaton state transitions using JSONata expressions. " +
-          "Given a current state, an input symbol, and a transition table, " +
-          "calculates the next state.",
-        version: "1.0.0",
-        "allowed-tools": ["jsonata_eval"],
-      },
-    },
-    statistics: {
-      url: "/api/skills/statistics/download",
-      frontmatter: {
-        name: "Statistics Calculator",
-        description:
-          "Perform statistical calculations on record lists using JSONata. " +
-          "Supports aggregations like sum, average, count, min, max, " +
-          "and grouping operations.",
-        version: "1.0.0",
-        "allowed-tools": ["jsonata_eval"],
-      },
-    },
-  })
   .build();
