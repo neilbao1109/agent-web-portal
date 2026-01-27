@@ -43,7 +43,7 @@ bun run dev:local
 bun run dev
 ```
 
-The UI will be available at `http://localhost:5173`, proxying to local backend at `http://localhost:3000`.
+The UI will be available at `http://localhost:5173`, proxying to local backend at `http://localhost:3400`.
 
 ### Development with SAM Local
 
@@ -117,7 +117,7 @@ examples-sst/
 
 | Script | Description |
 |--------|-------------|
-| `bun run dev` | Start UI (default: local backend at :3000) |
+| `bun run dev` | Start UI (default: local backend at :3400) |
 | `bun run dev --api sam` | Start UI with SAM local (:3456) |
 | `bun run dev --api <url>` | Start UI with custom API URL |
 | `bun run dev:local` | Start local Bun backend server |

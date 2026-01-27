@@ -40,7 +40,7 @@ if (command === "api") {
 		console.log("🚀 Starting SAM local (Lambda simulation) on port 3456...");
 		run(stackDir, "bun", ["run", "dev:sam"]);
 	} else {
-		console.log("🚀 Starting local dev server on port 3000...");
+		console.log("🚀 Starting local dev server on port 3400...");
 		run(stackDir, "bun", ["run", "dev"]);
 	}
 } else if (command === "webui") {
@@ -51,7 +51,7 @@ if (command === "api") {
 		console.log(`🌐 Starting webui with API: ${customUrl}`);
 		run(webuiDir, "bun", ["run", "dev", "--", "--url", customUrl]);
 	} else {
-		console.log("🌐 Starting webui with SAM local API (localhost:3456)...");
+		console.log("🌐 Starting webui with bun dev server (localhost:3400)...");
 		run(webuiDir, "bun", ["run", "dev"]);
 	}
 } else {
