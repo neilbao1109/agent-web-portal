@@ -45,6 +45,8 @@ bun run dev
 
 The UI will be available at `http://localhost:5173`, proxying to local backend at `http://localhost:3400`.
 
+By default, the local server uses in-memory storage for blobs. See [LocalStack S3 Setup](#localstack-s3-setup-optional) for persistent S3 storage during local development.
+
 ### Development with SAM Local
 
 ```bash
@@ -143,3 +145,106 @@ The SAM template creates:
 | `AUTH_TABLE` | DynamoDB table name for auth |
 | `BLOB_BUCKET` | S3 bucket name for blobs |
 | `SKILLS_BUCKET` | S3 bucket name for skills |
+| `S3_ENDPOINT` | S3 endpoint for Lambda to access LocalStack (e.g., `http://host.docker.internal:4566`) |
+| `S3_PUBLIC_ENDPOINT` | S3 endpoint for presigned URLs accessible by clients (e.g., `http://localhost:4566`) |
+| `AWS_ACCESS_KEY_ID` | AWS access key (use "test" for LocalStack) |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (use "test" for LocalStack) |
+
+## LocalStack S3 Setup (Optional)
+
+For local development with persistent S3 storage (instead of in-memory), you can use [LocalStack](https://localstack.cloud/).
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/) installed and running
+
+### Setup Steps
+
+1. **Start LocalStack**:
+
+   **macOS / Windows / Linux:**
+   ```bash
+   docker run -d --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack
+   ```
+
+2. **Create S3 bucket**:
+
+   **macOS / Linux:**
+   ```bash
+   AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 mb s3://awp-examples-blobs
+   ```
+
+   **Windows (PowerShell):**
+   ```powershell
+   $env:AWS_ACCESS_KEY_ID="test"; $env:AWS_SECRET_ACCESS_KEY="test"; aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 mb s3://awp-examples-blobs
+   ```
+
+   **Windows (Command Prompt):**
+   ```cmd
+   set AWS_ACCESS_KEY_ID=test && set AWS_SECRET_ACCESS_KEY=test && aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 mb s3://awp-examples-blobs
+   ```
+
+3. **Start the server with S3 configuration**:
+   ```bash
+   # The env.json file is pre-configured for LocalStack
+   bun run dev:sam
+   ```
+
+   The `env.json` file contains the LocalStack configuration that overrides `template.yaml` defaults:
+   ```json
+   {
+     "ExamplesFunction": {
+       "S3_ENDPOINT": "http://host.docker.internal:4566",
+       "S3_PUBLIC_ENDPOINT": "http://localhost:4566",
+       "BLOB_BUCKET": "awp-examples-blobs",
+       "SKILLS_BUCKET": "awp-examples-blobs",
+       "AWS_ACCESS_KEY_ID": "test",
+       "AWS_SECRET_ACCESS_KEY": "test"
+     }
+   }
+   ```
+
+   > **Why two S3 endpoints?**
+   > - `S3_ENDPOINT` (`host.docker.internal:4566`): Used by Lambda code running inside Docker to access LocalStack on your host machine
+   > - `S3_PUBLIC_ENDPOINT` (`localhost:4566`): Used for presigned URLs that clients (curl, browser) can access
+   >
+   > `host.docker.internal` is a special Docker DNS name that resolves to the host machine. It works on **macOS**, **Windows**, and **Linux** (Docker 20.10+).
+
+4. **Deploy skills to LocalStack** (optional):
+
+   **macOS / Linux:**
+   ```bash
+   S3_ENDPOINT=http://localhost:4566 BLOB_BUCKET=awp-examples-blobs AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test bun run deploy:skills:local
+   ```
+
+   **Windows (PowerShell):**
+   ```powershell
+   $env:S3_ENDPOINT="http://localhost:4566"; $env:BLOB_BUCKET="awp-examples-blobs"; $env:AWS_ACCESS_KEY_ID="test"; $env:AWS_SECRET_ACCESS_KEY="test"; bun run deploy:skills:local
+   ```
+
+### Verify LocalStack
+
+**macOS / Linux:**
+```bash
+# List buckets
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 ls
+
+# List objects in bucket
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 ls s3://awp-examples-blobs --recursive
+```
+
+**Windows (PowerShell):**
+```powershell
+# List buckets
+$env:AWS_ACCESS_KEY_ID="test"; $env:AWS_SECRET_ACCESS_KEY="test"; aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 ls
+
+# List objects in bucket
+$env:AWS_ACCESS_KEY_ID="test"; $env:AWS_SECRET_ACCESS_KEY="test"; aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 ls s3://awp-examples-blobs --recursive
+```
+
+### Stop LocalStack
+
+```bash
+docker stop localstack
+docker rm localstack
+```

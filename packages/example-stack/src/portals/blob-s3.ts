@@ -20,7 +20,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 // Configuration
 // =============================================================================
 
-const BLOB_BUCKET = process.env.BLOB_BUCKET ?? "";
 const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
 
 // TTL settings (in seconds for presigned URLs)
@@ -29,12 +28,46 @@ const OUTPUT_TTL_SECONDS = 5 * 60; // 5 minutes
 
 // S3 Client (lazy initialization)
 let s3Client: S3Client | null = null;
+let lastS3Endpoint: string | null = null;
 
 function getS3Client(): S3Client {
+  // Read env vars at call time to ensure they're set
+  const s3Endpoint = process.env.S3_ENDPOINT ?? "";
+  const blobBucket = process.env.BLOB_BUCKET ?? "";
+
+  // Reset client if endpoint changed (for testing)
+  if (s3Client && lastS3Endpoint !== s3Endpoint) {
+    s3Client = null;
+  }
+
   if (!s3Client) {
-    s3Client = new S3Client({ region: AWS_REGION });
+    lastS3Endpoint = s3Endpoint;
+
+    // Support LocalStack/MinIO for local development
+    if (s3Endpoint) {
+      console.log(`[S3] Using LocalStack endpoint: ${s3Endpoint}, bucket: ${blobBucket}`);
+      s3Client = new S3Client({
+        region: AWS_REGION,
+        endpoint: s3Endpoint,
+        forcePathStyle: true, // Required for LocalStack/MinIO
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID || "test",
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "test",
+        },
+      });
+    } else {
+      console.log("[S3] Using default AWS S3");
+      s3Client = new S3Client({ region: AWS_REGION });
+    }
   }
   return s3Client;
+}
+
+/**
+ * Get BLOB_BUCKET at runtime
+ */
+function getBlobBucket(): string {
+  return process.env.BLOB_BUCKET ?? "";
 }
 
 /**
@@ -69,7 +102,7 @@ export async function storeTempUploadS3(
   // Upload the file to S3
   await client.send(
     new PutObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
       Body: new Uint8Array(data),
       ContentType: contentType,
@@ -83,7 +116,7 @@ export async function storeTempUploadS3(
   const readUrl = await getSignedUrl(
     client,
     new GetObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
     }),
     { expiresIn: TEMP_TTL_SECONDS }
@@ -108,7 +141,7 @@ export async function getTempUploadS3(
   try {
     const response = await client.send(
       new GetObjectCommand({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Key: key,
       })
     );
@@ -157,7 +190,7 @@ export async function createOutputBlobSlotS3(): Promise<{
   const writeUrl = await getSignedUrl(
     client,
     new PutObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
     }),
     { expiresIn: OUTPUT_TTL_SECONDS }
@@ -167,7 +200,7 @@ export async function createOutputBlobSlotS3(): Promise<{
   const readUrl = await getSignedUrl(
     client,
     new GetObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
     }),
     { expiresIn: OUTPUT_TTL_SECONDS }
@@ -194,7 +227,7 @@ export async function readOutputBlobS3(
   try {
     const response = await client.send(
       new GetObjectCommand({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Key: key,
       })
     );
@@ -232,7 +265,7 @@ export async function writeOutputBlobS3(
 
   await client.send(
     new PutObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
       Body: data instanceof Uint8Array ? data : new Uint8Array(data),
       ContentType: contentType,
@@ -265,7 +298,7 @@ export async function storeImageS3(
 
   await client.send(
     new PutObjectCommand({
-      Bucket: BLOB_BUCKET,
+      Bucket: getBlobBucket(),
       Key: key,
       Body: new Uint8Array(data),
       ContentType: contentType,
@@ -297,7 +330,7 @@ export async function getStoredImageS3(key: string): Promise<{
   try {
     const response = await client.send(
       new GetObjectCommand({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Key: key,
       })
     );
@@ -351,7 +384,7 @@ export async function listStoredImagesS3(): Promise<
   do {
     const response = await client.send(
       new ListObjectsV2Command({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Prefix: "images/",
         ContinuationToken: continuationToken,
       })
@@ -390,7 +423,7 @@ export async function getImagePresignedUrlS3(key: string, expiresIn = 300): Prom
     // Check if the object exists
     await client.send(
       new HeadObjectCommand({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Key: key,
       })
     );
@@ -399,7 +432,7 @@ export async function getImagePresignedUrlS3(key: string, expiresIn = 300): Prom
     return await getSignedUrl(
       client,
       new GetObjectCommand({
-        Bucket: BLOB_BUCKET,
+        Bucket: getBlobBucket(),
         Key: key,
       }),
       { expiresIn }
@@ -416,12 +449,12 @@ export async function getImagePresignedUrlS3(key: string, expiresIn = 300): Prom
  * Check if S3 blob storage is configured
  */
 export function isS3BlobStorageConfigured(): boolean {
-  return BLOB_BUCKET !== "";
+  return getBlobBucket() !== "";
 }
 
 /**
  * Get the configured bucket name
  */
 export function getBlobBucketName(): string {
-  return BLOB_BUCKET;
+  return getBlobBucket();
 }
