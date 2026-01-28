@@ -22,7 +22,7 @@ AWP maintains two different schema representations for the same tool:
 | Aspect | LLM-Facing (Agent Runtime) | Tool-Facing (MCP Server) |
 |--------|---------------------------|-------------------------|
 | Input Blob | `{ uri: string, contentType?: string }` | `{ url: string, contentType?: string }` |
-| Output Blob Input | `{ accept?: string }` | `{ url: string, accept?: string }` |
+| Output Blob Input | `{ accept?: string, prefix?: string }` | `{ url: string, accept?: string }` |
 | Output Blob Result | `{ uri: string, contentType?: string }` | `{ contentType?: string }` |
 
 ### Why Two Formats?
@@ -32,6 +32,7 @@ AWP maintains two different schema representations for the same tool:
    - LLM doesn't need to know about temporary presigned URLs
    - URIs can be stored, referenced, and chained across tool calls
    - Output blobs don't require LLM to provide URLs (runtime generates them)
+   - LLM can optionally specify `prefix` to control where blobs are stored
 
 2. **Tool-Facing (URL-based)**
    - Uses presigned URLs for direct HTTP access

@@ -403,6 +403,8 @@ export interface LlmBlobInputValue {
 export interface LlmBlobOutputInputValue {
   /** Accepted MIME types for the output */
   accept?: string;
+  /** Storage prefix/path hint for where to allocate the blob (optional, uses default if not provided) */
+  prefix?: string;
 }
 
 /**

@@ -130,14 +130,16 @@ export class BlobInterceptor {
       }
     }
 
-    // Transform output blob fields: { accept? } -> { url, accept? }
+    // Transform output blob fields: { accept?, prefix? } -> { url, accept? }
     for (const field of blobSchema.outputBlobs) {
       const llmValue = llmArgs[field] as LlmBlobOutputInputValue | undefined;
       const acceptType = llmValue?.accept;
+      // Use LLM-provided prefix if available, otherwise use default outputPrefix
+      const storagePrefix = llmValue?.prefix ?? `${this.outputPrefix}/${field}`;
 
       // Generate presigned PUT URL for output
       const { uri, presignedUrl } = await this.storage.generatePresignedPutUrl(
-        `${this.outputPrefix}/${field}`,
+        storagePrefix,
         { contentType: acceptType }
       );
       outputPresigned[field] = presignedUrl;

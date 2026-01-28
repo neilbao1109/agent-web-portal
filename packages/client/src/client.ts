@@ -502,7 +502,7 @@ export class AwpClient {
         }
       }
 
-      // Transform output blob fields: remove 'url', keep only 'accept'
+      // Transform output blob fields: remove 'url', keep 'accept' and add 'prefix'
       for (const field of blobSchema.outputBlobs) {
         const prop = newProperties[field] as Record<string, unknown> | undefined;
         if (prop && typeof prop === "object") {
@@ -514,6 +514,10 @@ export class AwpClient {
               accept: {
                 type: "string",
                 description: "Accepted MIME types for the output",
+              },
+              prefix: {
+                type: "string",
+                description: "Storage prefix/path hint for where to allocate the blob (optional)",
               },
             },
           };
