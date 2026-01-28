@@ -98,7 +98,7 @@ export class ToolRegistry {
     if (collisions.length > 0) {
       throw new Error(
         `Tool "${name}" has blob field name collision between input and output: ${collisions.join(", ")}. ` +
-          `Use distinct names (e.g., 'source' for input, 'result' for output).`
+        `Use distinct names (e.g., 'source' for input, 'result' for output).`
       );
     }
 
@@ -183,7 +183,7 @@ export class ToolRegistry {
         throw new BlobContextError(
           name,
           `Tool requires blob context but none was provided. ` +
-            `Required _blobContext fields: ${requiredFields.join(", ")}`
+          `Required _blobContext fields: ${requiredFields.join(", ")}`
         );
       }
 
@@ -214,8 +214,31 @@ export class ToolRegistry {
       }
     }
 
+    // Prepare args for validation
+    // Blob fields are passed via blobContext, not args. For validation purposes,
+    // we need to provide the { url: string } object structure that matches the
+    // Zod schema (inputBlob returns z.object({ url, contentType? }), 
+    // outputBlob returns z.object({ url, accept? })).
+    let argsForValidation = args;
+    if (hasInputBlobs || hasOutputBlobs) {
+      const argsWithBlobPlaceholders = { ...(args as Record<string, unknown>) };
+      // Input blobs: { url: string, contentType?: string }
+      for (const blobField of tool.inputBlobs) {
+        if (blobContext?.input[blobField]) {
+          argsWithBlobPlaceholders[blobField] = { url: blobContext.input[blobField] };
+        }
+      }
+      // Output blobs: { url: string, accept?: string }
+      for (const blobField of tool.outputBlobs) {
+        if (blobContext?.output[blobField]) {
+          argsWithBlobPlaceholders[blobField] = { url: blobContext.output[blobField] };
+        }
+      }
+      argsForValidation = argsWithBlobPlaceholders;
+    }
+
     // Validate input
-    let inputResult = tool.inputSchema.safeParse(args);
+    let inputResult = tool.inputSchema.safeParse(argsForValidation);
 
     // If validation fails and coercion is enabled, try parsing stringified args
     if (!inputResult.success && this.config.coerceXmlClientArgs) {
@@ -251,12 +274,15 @@ export class ToolRegistry {
     // Execute handler with context
     const result = await tool.handler(handlerArgs, handlerContext);
 
-    // Fill in output blob URIs
+    // Fill in output blob URIs as { url: string } objects to match the outputBlob schema
     let finalResult = result;
     if (hasOutputBlobs && blobContext && typeof result === "object" && result !== null) {
       finalResult = { ...result };
       for (const blobField of tool.outputBlobs) {
-        (finalResult as Record<string, unknown>)[blobField] = blobContext.outputUri[blobField];
+        // outputBlob schema expects { url: string, accept?: string }
+        (finalResult as Record<string, unknown>)[blobField] = {
+          url: blobContext.outputUri[blobField],
+        };
       }
     }
 

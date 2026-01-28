@@ -775,8 +775,8 @@ export default function PortalTest() {
     // and should not be included in the default arguments
     const outputBlobFields = tool._awp?.blob
       ? Object.entries(tool._awp.blob)
-          .filter(([_, descriptor]) => descriptor.kind === 'output')
-          .map(([fieldName]) => fieldName)
+        .filter(([_, descriptor]) => descriptor.kind === 'output')
+        .map(([fieldName]) => fieldName)
       : [];
 
     // Generate default arguments from schema
@@ -840,13 +840,25 @@ export default function PortalTest() {
         const apiOrigin = API_BASE || window.location.origin;
 
         // For input blob fields, resolve the URI to a presigned URL
-        // Supported formats:
+        // Supported argument formats:
+        // - String: "output/output-xxx" or "http://..." or "/api/blob/..."
+        // - Object: { uri: "output/output-xxx" } or { url: "http://..." }
+        // Supported URI formats:
         // 1. Full URL (http:// or https://) - use as-is
         // 2. Relative path (/api/blob/...) - convert to full URL
         // 3. S3 key (output/output-xxx, temp/xxx, images/xxx) - resolve via /api/blob/files/
         for (const field of inputBlobs) {
-          const value = args[field];
-          if (typeof value === 'string') {
+          const rawValue = args[field];
+          // Extract the URI string from either string or object format
+          let value: string | undefined;
+          if (typeof rawValue === 'string') {
+            value = rawValue;
+          } else if (rawValue && typeof rawValue === 'object') {
+            // Support { uri: "..." } or { url: "..." } formats
+            value = (rawValue as { uri?: string; url?: string }).uri || (rawValue as { uri?: string; url?: string }).url;
+          }
+
+          if (value) {
             if (value.startsWith('http://') || value.startsWith('https://')) {
               // Already a full URL
               input[field] = value;
@@ -885,11 +897,20 @@ export default function PortalTest() {
         setOutputBlobUrls({});
       }
 
+      // Prepare arguments for the tool call
+      // Remove blob fields from args - they are passed via _blobContext
+      const allBlobFields = [...inputBlobs, ...outputBlobs];
+      const argsWithoutBlobs = allBlobFields.length > 0
+        ? Object.fromEntries(
+            Object.entries(args).filter(([key]) => !allBlobFields.includes(key))
+          )
+        : args;
+
       const result = await jsonRpc(
         'tools/call',
         {
           name: selectedTool,
-          arguments: args,
+          arguments: argsWithoutBlobs,
           ...(blobContext && { _blobContext: blobContext }),
         },
         authState.status === 'authenticated' && isAuthPortal

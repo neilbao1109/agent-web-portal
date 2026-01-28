@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { inputBlob, outputBlob } from "./blob.ts";
 import { ToolRegistry } from "./tool-registry.ts";
+import type { ToolRegistrationOptions } from "./types.ts";
 
 describe("ToolRegistry", () => {
   describe("registerTool()", () => {
@@ -42,6 +43,9 @@ describe("ToolRegistry", () => {
       const registry = new ToolRegistry();
 
       // This should work - different field names
+      // Note: handler returns empty object since blob fields are filled by registry
+      // Using 'as any' because the actual handler type expects blob fields to be present,
+      // but at runtime they are automatically filled by the registry
       registry.registerTool("image_tool", {
         inputSchema: z.object({
           source: inputBlob({ mimeType: "image/*", description: "Source image" }),
@@ -50,7 +54,7 @@ describe("ToolRegistry", () => {
           result: outputBlob({ accept: "image/png", description: "Result image" }),
         }),
         description: "An image processing tool",
-        handler: async () => ({ result: "" }),
+        handler: (async () => ({})) as any,
       });
 
       expect(registry.getTool("image_tool")).toBeDefined();
@@ -68,7 +72,7 @@ describe("ToolRegistry", () => {
             image: outputBlob({ accept: "image/png", description: "Result image" }),
           }),
           description: "A tool with blob name collision",
-          handler: async () => ({ image: "" }),
+          handler: (async () => ({})) as any,
         });
       }).toThrow('Tool "image_tool" has blob field name collision between input and output: image');
     });
@@ -87,7 +91,7 @@ describe("ToolRegistry", () => {
             mask: outputBlob({ accept: "image/png", description: "Result mask" }),
           }),
           description: "A tool with multiple blob collisions",
-          handler: async () => ({ image: "", mask: "" }),
+          handler: (async () => ({})) as any,
         });
       }).toThrow("image, mask");
     });
@@ -107,7 +111,7 @@ describe("ToolRegistry", () => {
           metadata: z.object({ width: z.number() }),
         }),
         description: "Edit an image",
-        handler: async () => ({ result: "", metadata: { width: 0 } }),
+        handler: (async () => ({ metadata: { width: 0 } })) as any,
       });
 
       const schema = registry.toMcpSchema("image_edit");
@@ -133,7 +137,7 @@ describe("ToolRegistry", () => {
           result: outputBlob({ accept: "image/png", description: "Result image" }),
         }),
         description: "Edit an image",
-        handler: async () => ({ result: "" }),
+        handler: (async () => ({})) as any,
       });
 
       const schema = registry.toMcpSchema("image_edit");

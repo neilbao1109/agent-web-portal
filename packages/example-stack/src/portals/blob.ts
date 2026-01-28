@@ -250,6 +250,7 @@ const OUTPUT_TTL_MS = 5 * 60 * 1000; // 5 minutes
  */
 export function createOutputBlobSlot(): {
   id: string;
+  key: string;
   writeUrl: string;
   readUrl: string;
   expiresAt: string;
@@ -263,6 +264,7 @@ export function createOutputBlobSlot(): {
   }
 
   const id = `output-${now}-${Math.random().toString(36).substring(2, 10)}`;
+  const key = `output/${id}`; // S3-compatible key format for blob chaining
   const expiresAt = now + OUTPUT_TTL_MS;
 
   outputBlobStore.set(id, {
@@ -273,6 +275,7 @@ export function createOutputBlobSlot(): {
 
   return {
     id,
+    key, // For use as input URI in subsequent tool calls
     writeUrl: `/api/blob/output/${id}`,
     readUrl: `/api/blob/output/${id}`,
     expiresAt: new Date(expiresAt).toISOString(),

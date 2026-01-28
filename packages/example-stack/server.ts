@@ -469,22 +469,42 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
-  // Download image from permanent storage
+  // Download blob from storage (supports output/, temp/, images/ prefixes)
   if (pathname.startsWith("/api/blob/files/") && req.method === "GET") {
     const key = decodeURIComponent(pathname.slice("/api/blob/files/".length));
-    const image = getStoredImage(key);
+    
+    let blobData: { data: ArrayBuffer; contentType: string } | null = null;
+    
+    if (key.startsWith("output/")) {
+      // Output blob - extract the id from "output/{id}"
+      const id = key.slice("output/".length);
+      blobData = readOutputBlob(id);
+    } else if (key.startsWith("temp/")) {
+      // Temp upload - extract the id from "temp/{id}"
+      const id = key.slice("temp/".length);
+      const temp = getTempUpload(id);
+      if (temp) {
+        blobData = { data: temp.data, contentType: temp.contentType };
+      }
+    } else {
+      // Images or other keys
+      const image = getStoredImage(key);
+      if (image) {
+        blobData = { data: image.data, contentType: image.contentType };
+      }
+    }
 
-    if (!image) {
-      return new Response(JSON.stringify({ error: "Image not found or expired" }), {
+    if (!blobData) {
+      return new Response(JSON.stringify({ error: "Blob not found or expired" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    return new Response(image.data, {
+    return new Response(blobData.data, {
       status: 200,
       headers: {
-        "Content-Type": image.contentType,
+        "Content-Type": blobData.contentType,
         "Content-Disposition": `inline; filename="${key.split("/").pop()}"`,
         "Access-Control-Allow-Origin": "*",
       },

@@ -64,9 +64,35 @@ export interface BlobMetadata {
 export const AWP_BLOB_MARKER = Symbol.for("awp-blob");
 
 /**
- * Extended Zod string schema with blob marker
+ * Input blob Zod schema structure: { url: string, contentType?: string }
  */
-export type BlobSchema = z.ZodString & {
+export type InputBlobZodSchema = z.ZodObject<{
+  url: z.ZodString;
+  contentType: z.ZodOptional<z.ZodString>;
+}> & {
+  [AWP_BLOB_MARKER]: BlobMetadata;
+};
+
+/**
+ * Output blob Zod schema structure: { url: string, accept?: string }
+ */
+export type OutputBlobZodSchema = z.ZodObject<{
+  url: z.ZodString;
+  accept: z.ZodOptional<z.ZodString>;
+}> & {
+  [AWP_BLOB_MARKER]: BlobMetadata;
+};
+
+/**
+ * Unified blob schema type (can be input or output)
+ */
+export type BlobSchema = InputBlobZodSchema | OutputBlobZodSchema;
+
+/**
+ * Legacy string-based blob schema (for backward compatibility detection)
+ * @deprecated
+ */
+export type LegacyBlobSchema = z.ZodString & {
   [AWP_BLOB_MARKER]: BlobMetadata;
 };
 
@@ -84,7 +110,7 @@ export type BlobSchema = z.ZodString & {
  * For LLMs (AWP clients): The input parameter schema will be { uri: string, contentType?: string }
  *
  * @param options - Configuration for the input blob
- * @returns A Zod string schema marked as an input blob
+ * @returns A Zod object schema marked as an input blob
  *
  * @example
  * ```typescript
@@ -98,18 +124,21 @@ export type BlobSchema = z.ZodString & {
  * });
  * ```
  */
-export function inputBlob(options: InputBlobOptions): BlobSchema {
-  const schema = z.string();
+export function inputBlob(options: InputBlobOptions): InputBlobZodSchema {
+  const schema = z.object({
+    url: z.string(),
+    contentType: z.string().optional(),
+  });
 
   // Attach blob metadata using the marker symbol
-  (schema as BlobSchema)[AWP_BLOB_MARKER] = {
+  (schema as InputBlobZodSchema)[AWP_BLOB_MARKER] = {
     direction: "input",
     description: options.description,
     mimeType: options.mimeType,
     maxSize: options.maxSize,
   };
 
-  return schema as BlobSchema;
+  return schema as InputBlobZodSchema;
 }
 
 /**
@@ -124,7 +153,7 @@ export function inputBlob(options: InputBlobOptions): BlobSchema {
  *                         The output result includes { uri: string, contentType?: string }
  *
  * @param options - Configuration for the output blob
- * @returns A Zod string schema marked as an output blob
+ * @returns A Zod object schema marked as an output blob
  *
  * @example
  * ```typescript
@@ -138,17 +167,20 @@ export function inputBlob(options: InputBlobOptions): BlobSchema {
  * });
  * ```
  */
-export function outputBlob(options: OutputBlobOptions): BlobSchema {
-  const schema = z.string();
+export function outputBlob(options: OutputBlobOptions): OutputBlobZodSchema {
+  const schema = z.object({
+    url: z.string(),
+    accept: z.string().optional(),
+  });
 
   // Attach blob metadata using the marker symbol
-  (schema as BlobSchema)[AWP_BLOB_MARKER] = {
+  (schema as OutputBlobZodSchema)[AWP_BLOB_MARKER] = {
     direction: "output",
     description: options.description,
     mimeType: options.accept,
   };
 
-  return schema as BlobSchema;
+  return schema as OutputBlobZodSchema;
 }
 
 /**
@@ -164,7 +196,7 @@ export function outputBlob(options: OutputBlobOptions): BlobSchema {
  * - Data that needs access control
  *
  * @param options - Optional configuration for the blob
- * @returns A Zod string schema marked as a blob
+ * @returns A Zod object schema marked as a blob
  *
  * @example
  * ```typescript
@@ -175,20 +207,24 @@ export function outputBlob(options: OutputBlobOptions): BlobSchema {
  *   options: z.object({ quality: z.number() }),
  * });
  * ```
+ * @deprecated Use inputBlob() or outputBlob() instead
  */
-export function blob(options?: BlobOptions): BlobSchema {
-  const schema = z.string();
+export function blob(options?: BlobOptions): InputBlobZodSchema {
+  const schema = z.object({
+    url: z.string(),
+    contentType: z.string().optional(),
+  });
 
   // Attach blob metadata using the marker symbol
   // For backward compatibility, default to "input" direction
-  (schema as BlobSchema)[AWP_BLOB_MARKER] = {
+  (schema as InputBlobZodSchema)[AWP_BLOB_MARKER] = {
     direction: "input" as BlobDirection,
     description: options?.description ?? "",
     mimeType: options?.mimeType,
     maxSize: options?.maxSize,
   };
 
-  return schema as BlobSchema;
+  return schema as InputBlobZodSchema;
 }
 
 /**

@@ -15,11 +15,12 @@ import {
 } from "./blob.ts";
 
 describe("inputBlob()", () => {
-  test("creates a string schema with input blob marker", () => {
+  test("creates an object schema with input blob marker", () => {
     const schema = inputBlob({ description: "A PDF document" });
 
-    // Should be a valid Zod string schema
-    expect(schema.parse("test")).toBe("test");
+    // Should be a valid Zod object schema with { url, contentType? }
+    const result = schema.parse({ url: "https://example.com/file.pdf" });
+    expect(result.url).toBe("https://example.com/file.pdf");
 
     // Should have the blob marker
     expect(AWP_BLOB_MARKER in schema).toBe(true);
@@ -61,11 +62,12 @@ describe("inputBlob()", () => {
 });
 
 describe("outputBlob()", () => {
-  test("creates a string schema with output blob marker", () => {
+  test("creates an object schema with output blob marker", () => {
     const schema = outputBlob({ description: "Generated thumbnail" });
 
-    // Should be a valid Zod string schema
-    expect(schema.parse("test")).toBe("test");
+    // Should be a valid Zod object schema with { url, accept? }
+    const result = schema.parse({ url: "https://example.com/output.png" });
+    expect(result.url).toBe("https://example.com/output.png");
 
     // Should have the blob marker
     expect(AWP_BLOB_MARKER in schema).toBe(true);
@@ -97,11 +99,12 @@ describe("outputBlob()", () => {
 });
 
 describe("blob() (legacy)", () => {
-  test("creates a string schema with blob marker", () => {
+  test("creates an object schema with blob marker", () => {
     const schema = blob();
 
-    // Should be a valid Zod string schema
-    expect(schema.parse("test")).toBe("test");
+    // Should be a valid Zod object schema with { url, contentType? }
+    const result = schema.parse({ url: "https://example.com/file" });
+    expect(result.url).toBe("https://example.com/file");
 
     // Should have the blob marker
     expect(AWP_BLOB_MARKER in schema).toBe(true);
