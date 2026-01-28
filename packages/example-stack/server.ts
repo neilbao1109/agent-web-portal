@@ -472,9 +472,9 @@ async function handleRequest(req: Request): Promise<Response> {
   // Download blob from storage (supports output/, temp/, images/ prefixes)
   if (pathname.startsWith("/api/blob/files/") && req.method === "GET") {
     const key = decodeURIComponent(pathname.slice("/api/blob/files/".length));
-    
+
     let blobData: { data: ArrayBuffer; contentType: string } | null = null;
-    
+
     if (key.startsWith("output/")) {
       // Output blob - extract the id from "output/{id}"
       const id = key.slice("output/".length);
