@@ -5,8 +5,8 @@
  * These tools are always available to the LLM regardless of active skills.
  */
 
+import type { AwpManager, SkillInfo } from "@agent-web-portal/client";
 import type { AgentContext } from "./agent-context";
-import type { AwpManager, SkillInfo } from "./awp-manager";
 import type { LlmToolSchema } from "./llm";
 
 /**

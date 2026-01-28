@@ -5,7 +5,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AwpManager, type PrefixedTool, type RegisteredEndpoint, type SkillInfo } from "../core";
+import {
+  AwpManager,
+  type PrefixedTool,
+  type RegisteredEndpoint,
+  type SkillInfo,
+} from "@agent-web-portal/client";
+import { HttpStorageProvider, IndexedDBKeyStorage } from "@agent-web-portal/client-browser";
 
 /**
  * Stored endpoint for persistence
@@ -16,6 +22,24 @@ interface StoredEndpoint {
 }
 
 const ENDPOINTS_STORAGE_KEY = "awp-agent-endpoints";
+
+// Get the API base URL from stored endpoints or use default
+function getApiBaseUrl(): string {
+  try {
+    const stored = localStorage.getItem(ENDPOINTS_STORAGE_KEY);
+    if (stored) {
+      const endpoints: StoredEndpoint[] = JSON.parse(stored);
+      if (endpoints.length > 0 && endpoints[0]?.url) {
+        // Extract base URL from the first endpoint
+        const url = new URL(endpoints[0].url);
+        return `${url.protocol}//${url.host}`;
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+  return "http://localhost:3400";
+}
 
 export interface UseAwpManagerResult {
   /** AWP Manager instance */
@@ -39,7 +63,19 @@ export interface UseAwpManagerResult {
 }
 
 export function useAwpManager(): UseAwpManagerResult {
-  const manager = useMemo(() => new AwpManager({ clientName: "AWP Agent" }), []);
+  const manager = useMemo(() => {
+    const apiBaseUrl = getApiBaseUrl();
+    console.log(`[useAwpManager] Using API base URL: ${apiBaseUrl}`);
+    
+    return new AwpManager({
+      clientName: "AWP Agent",
+      keyStorage: new IndexedDBKeyStorage(),
+      storage: new HttpStorageProvider({
+        baseUrl: apiBaseUrl,
+      }),
+      outputPrefix: "agent-output",
+    });
+  }, []);
 
   const [endpoints, setEndpoints] = useState<RegisteredEndpoint[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);

@@ -32,6 +32,7 @@ import {
   ConversationList,
 } from './components';
 import { useLlmConfig, useAwpManager, useConversations, useAgent } from './hooks';
+import { StorageContextProvider } from './contexts/StorageContext';
 
 const LEFT_DRAWER_WIDTH = 280;
 const RIGHT_DRAWER_WIDTH = 300;
@@ -89,7 +90,8 @@ export function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', height: '100vh' }}>
+      <StorageContextProvider baseUrl="http://localhost:3400">
+        <Box sx={{ display: 'flex', height: '100vh' }}>
         {/* App Bar */}
         <AppBar
           position="fixed"
@@ -323,6 +325,7 @@ export function App() {
           currentConfig={config}
         />
       </Box>
+      </StorageContextProvider>
     </ThemeProvider>
   );
 }

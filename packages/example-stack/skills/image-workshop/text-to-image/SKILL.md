@@ -143,9 +143,33 @@ Choose dimensions that match your content:
 4. **Lower guidance (2-3)** in {{flux_flex}} for more creative freedom
 5. **Higher guidance (4-5)** in {{flux_flex}} for strict prompt adherence
 
+## Important: Language Requirements
+
+**⚠️ All prompts MUST be in English!**
+
+The Stability AI and FLUX APIs only support English prompts. If the user provides a prompt in another language (e.g., Chinese, Japanese, Spanish), you MUST:
+
+1. **Translate the user's prompt to English** before calling the tool
+2. **Enhance the translated prompt** with descriptive English keywords
+3. Keep the original intent and style of the user's request
+
+### Translation Example
+
+User request: "画一个可爱的男孩牵着小狗在公园散步"
+
+Translated and enhanced prompt for the tool:
+```json
+{
+  "prompt": "A cute young boy walking a friendly dog in a sunny park, warm lighting, heartwarming scene, high quality, detailed illustration, soft colors"
+}
+```
+
+**Always translate non-English prompts to detailed English descriptions before calling any image generation tool.**
+
 ## Limitations
 
 - Maximum resolution: 1440x1440 (FLUX), 2048x2048 (Stability)
 - Processing time: 10-60 seconds depending on model
 - Some content may be filtered by safety systems
 - API rate limits apply
+- **Prompts must be in English only**

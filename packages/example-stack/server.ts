@@ -169,6 +169,14 @@ async function handlePortalRequest(
   portal: { handleRequest: (req: Request) => Promise<Response> },
   portalName: string
 ): Promise<Response> {
+  // CORS headers for portal responses
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, Mcp-Session-Id, X-AWP-Signature, X-AWP-Pubkey, X-AWP-Timestamp",
+  };
+
   // Check if this is a skills/list request
   if (req.method === "POST") {
     try {
@@ -185,7 +193,7 @@ async function handlePortalRequest(
             result: skills,
           }),
           {
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...corsHeaders },
           }
         );
       }
@@ -195,7 +203,19 @@ async function handlePortalRequest(
   }
 
   // Forward to portal handler for all other requests
-  return portal.handleRequest(req);
+  const response = await portal.handleRequest(req);
+
+  // Add CORS headers to the response
+  const newHeaders = new Headers(response.headers);
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    newHeaders.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
 }
 
 // =============================================================================
@@ -354,7 +374,8 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // Prepare download - create output blob slot and get presigned URLs
-  if (pathname === "/api/blob/prepare-download" && req.method === "POST") {
+  // Also accepts /api/blob/prepare-output as an alias
+  if ((pathname === "/api/blob/prepare-download" || pathname === "/api/blob/prepare-output") && req.method === "POST") {
     const result = createOutputBlobSlot();
     // Build absolute URLs using the request's Host header
     const host = req.headers.get("host") || `localhost:${PORT}`;
@@ -382,15 +403,19 @@ async function handleRequest(req: Request): Promise<Response> {
     const contentType = req.headers.get("content-type") ?? "application/octet-stream";
     const data = await req.arrayBuffer();
 
+    console.log(`[Blob] Writing output blob: ${id}, contentType: ${contentType}, size: ${data.byteLength} bytes`);
+
     const success = writeOutputBlob(id, data, contentType);
 
     if (!success) {
+      console.error(`[Blob] Failed to write output blob: ${id} - not found or expired`);
       return new Response(JSON.stringify({ error: "Output blob not found or expired" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
+    console.log(`[Blob] Successfully wrote output blob: ${id}`);
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: {
@@ -403,9 +428,11 @@ async function handleRequest(req: Request): Promise<Response> {
   // Read from output blob
   if (pathname.startsWith("/api/blob/output/") && req.method === "GET") {
     const id = decodeURIComponent(pathname.slice("/api/blob/output/".length));
+    console.log(`[Blob] Reading output blob: ${id}`);
     const blob = readOutputBlob(id);
 
     if (!blob) {
+      console.error(`[Blob] Output blob not found: ${id}`);
       return new Response(JSON.stringify({ error: "Output blob not found or expired" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
@@ -469,42 +496,22 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
-  // Download blob from storage (supports output/, temp/, images/ prefixes)
+  // Download image from permanent storage
   if (pathname.startsWith("/api/blob/files/") && req.method === "GET") {
     const key = decodeURIComponent(pathname.slice("/api/blob/files/".length));
+    const image = getStoredImage(key);
 
-    let blobData: { data: ArrayBuffer; contentType: string } | null = null;
-
-    if (key.startsWith("output/")) {
-      // Output blob - extract the id from "output/{id}"
-      const id = key.slice("output/".length);
-      blobData = readOutputBlob(id);
-    } else if (key.startsWith("temp/")) {
-      // Temp upload - extract the id from "temp/{id}"
-      const id = key.slice("temp/".length);
-      const temp = getTempUpload(id);
-      if (temp) {
-        blobData = { data: temp.data, contentType: temp.contentType };
-      }
-    } else {
-      // Images or other keys
-      const image = getStoredImage(key);
-      if (image) {
-        blobData = { data: image.data, contentType: image.contentType };
-      }
-    }
-
-    if (!blobData) {
-      return new Response(JSON.stringify({ error: "Blob not found or expired" }), {
+    if (!image) {
+      return new Response(JSON.stringify({ error: "Image not found or expired" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    return new Response(blobData.data, {
+    return new Response(image.data, {
       status: 200,
       headers: {
-        "Content-Type": blobData.contentType,
+        "Content-Type": image.contentType,
         "Content-Disposition": `inline; filename="${key.split("/").pop()}"`,
         "Access-Control-Allow-Origin": "*",
       },

@@ -87,6 +87,35 @@ You can discover and load skills using the discover_skills and load_skill tools.
 
 Before using a skill's tools, you must first load the skill. You can unload skills you no longer need to keep the context focused.
 
+## CRITICAL: Displaying Generated Images
+
+When an image generation tool (like flux_pro, txt2img, etc.) returns a result, it includes an image blob with a URI. You MUST display it using Markdown.
+
+Example tool result:
+\`\`\`json
+{
+  "metadata": { "id": "...", "seed": 123 },
+  "image": { "uri": "blob://output-1234-abcd" }
+}
+\`\`\`
+
+You MUST respond with the image displayed in Markdown like this:
+\`\`\`
+Here is your generated image:
+
+![Generated image](blob://output-1234-abcd)
+\`\`\`
+
+**RULES:**
+1. Extract the EXACT \`uri\` value from the \`image\` field (e.g., \`blob://output-1234-abcd\`)
+2. Use Markdown image syntax: \`![description](URI_HERE)\`
+3. NEVER leave the src empty - always include the blob:// URI from the result
+4. The URI starts with \`blob://\` followed by the output ID
+
+Do NOT use the entire object - only use the \`uri\` string value (e.g., \`blob://abc123\`).
+
+The system will automatically resolve the blob URI and display the image inline in the chat.
+
 Always be helpful, accurate, and efficient in using the available tools.`;
 
 export function useAgent(options: UseAgentOptions): UseAgentResult {
@@ -350,9 +379,30 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
                 }
               } else {
                 // Execute AWP tool
-                const awpResult = await manager.callTool(toolCall.name, toolCall.arguments);
-                result = JSON.stringify(awpResult.output, null, 2);
-                isError = awpResult.isError ?? false;
+                console.log(`[AWP] Calling tool: ${toolCall.name}`, toolCall.arguments);
+                try {
+                  const awpResult = await manager.callTool(toolCall.name, toolCall.arguments);
+                  console.log(`[AWP] Tool result for ${toolCall.name}:`, awpResult);
+                  console.log(`[AWP] Tool output:`, awpResult.output);
+                  console.log(`[AWP] Tool blobs:`, awpResult.blobs);
+                  console.log(`[AWP] Tool blobs JSON:`, JSON.stringify(awpResult.blobs, null, 2));
+                  
+                  // Combine output and blobs in the result
+                  // Blobs contain { uri, contentType? } for each output blob field
+                  const output = awpResult.output as Record<string, unknown> | undefined;
+                  const blobs = awpResult.blobs as Record<string, unknown> | undefined;
+                  const combinedResult = {
+                    ...(output ?? {}),
+                    ...(blobs ?? {}),
+                  };
+                  console.log(`[AWP] Combined result for LLM:`, combinedResult);
+                  console.log(`[AWP] Combined result JSON:`, JSON.stringify(combinedResult, null, 2));
+                  result = JSON.stringify(combinedResult, null, 2);
+                  isError = awpResult.isError ?? false;
+                } catch (toolErr) {
+                  console.error(`[AWP] Tool call failed for ${toolCall.name}:`, toolErr);
+                  throw toolErr;
+                }
               }
             } catch (err) {
               result = `Error: ${err instanceof Error ? err.message : String(err)}`;

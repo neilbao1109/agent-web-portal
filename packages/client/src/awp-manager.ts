@@ -7,14 +7,11 @@
  * - Aggregated skill and tool listing
  */
 
-import {
-  AwpAuth,
-  AwpClient,
-  type AwpToolSchema,
-  type ToolCallResult,
-} from "@agent-web-portal/client";
-import { IndexedDBKeyStorage } from "@agent-web-portal/client-browser";
-import { HashRegistry } from "../utils/hash";
+import { AwpAuth } from "./auth/index.ts";
+import { AwpClient, type AwpToolSchema, type ToolCallResult } from "./client.ts";
+import type { KeyStorage } from "./auth/types.ts";
+import type { StorageProvider } from "./storage/types.ts";
+import { HashRegistry } from "./utils/hash.ts";
 
 /**
  * Skill information from an endpoint
@@ -91,8 +88,12 @@ interface SkillsListResponse {
 export interface AwpManagerOptions {
   /** Client name for auth (displayed during authorization) */
   clientName?: string;
-  /** Custom key storage (defaults to IndexedDBKeyStorage) */
-  keyStorage?: InstanceType<typeof IndexedDBKeyStorage>;
+  /** Custom key storage (must be provided by platform-specific package) */
+  keyStorage: KeyStorage;
+  /** Storage provider for blob handling (optional, but required for blob tools) */
+  storage?: StorageProvider;
+  /** Default prefix for output blobs */
+  outputPrefix?: string;
 }
 
 /**
@@ -106,12 +107,16 @@ export interface AwpManagerOptions {
 export class AwpManager {
   private endpoints = new Map<string, RegisteredEndpoint>();
   private hashRegistry = new HashRegistry();
-  private keyStorage: InstanceType<typeof IndexedDBKeyStorage>;
+  private keyStorage: KeyStorage;
   private clientName: string;
+  private storage?: StorageProvider;
+  private outputPrefix?: string;
 
-  constructor(options: AwpManagerOptions = {}) {
+  constructor(options: AwpManagerOptions) {
     this.clientName = options.clientName ?? "AWP Agent";
-    this.keyStorage = options.keyStorage ?? new IndexedDBKeyStorage();
+    this.keyStorage = options.keyStorage;
+    this.storage = options.storage;
+    this.outputPrefix = options.outputPrefix;
   }
 
   /**
@@ -142,10 +147,12 @@ export class AwpManager {
     // Check if we have a valid key
     const isAuthenticated = await auth.hasValidKey(normalizedUrl);
 
-    // Create client
+    // Create client with storage if available
     const client = new AwpClient({
       endpoint: normalizedUrl,
       auth,
+      storage: this.storage,
+      outputPrefix: this.outputPrefix,
     });
 
     const registered: RegisteredEndpoint = {
@@ -284,14 +291,24 @@ export class AwpManager {
     prefixedName: string,
     args: Record<string, unknown>
   ): Promise<ToolCallResult<TOutput, TBlobs>> {
+    console.log(`[AwpManager] callTool: ${prefixedName}`, args);
     const { endpointId, toolName } = this.parsePrefixedName(prefixedName);
 
     const endpoint = this.endpoints.get(endpointId);
     if (!endpoint) {
+      console.error(`[AwpManager] Endpoint not found: ${endpointId}`);
       throw new Error(`Endpoint not found: ${endpointId}`);
     }
 
-    return endpoint.client.callTool<TOutput, TBlobs>(toolName, args);
+    console.log(`[AwpManager] Calling ${toolName} on endpoint ${endpoint.url}`);
+    try {
+      const result = await endpoint.client.callTool<TOutput, TBlobs>(toolName, args);
+      console.log(`[AwpManager] Tool ${toolName} result:`, JSON.stringify(result, null, 2));
+      return result;
+    } catch (err) {
+      console.error(`[AwpManager] Tool ${toolName} failed:`, err);
+      throw err;
+    }
   }
 
   /**

@@ -243,7 +243,7 @@ interface OutputBlob {
 }
 
 const outputBlobStore = new Map<string, OutputBlob>();
-const OUTPUT_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const OUTPUT_TTL_MS = 30 * 60 * 1000; // 30 minutes (increased from 5 minutes)
 
 /**
  * Create a placeholder for output blob (for prepare-download API)

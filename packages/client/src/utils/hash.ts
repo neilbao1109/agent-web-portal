@@ -17,7 +17,7 @@ function base64urlEncode(data: Uint8Array): string {
  * @param length - Desired length of the hash (default: 6)
  * @returns A short base64url-encoded hash
  */
-export async function shortHash(input: string, length: number = 6): Promise<string> {
+export async function shortHash(input: string, length = 6): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);

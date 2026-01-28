@@ -145,7 +145,8 @@ export class AwpClient {
   constructor(options: AwpClientOptions) {
     this.endpoint = options.endpoint.replace(/\/$/, ""); // Remove trailing slash
     this.auth = options.auth ?? null;
-    this.fetchFn = options.fetch ?? fetch;
+    // Bind fetch to globalThis to prevent "Illegal invocation" in browsers
+    this.fetchFn = options.fetch ?? fetch.bind(globalThis);
     this.headers = options.headers ?? {};
 
     // Only create blob interceptor if storage is provided
@@ -168,6 +169,7 @@ export class AwpClient {
       method,
       params,
     });
+    console.log(`[AwpClient] Sending request to ${this.endpoint}:`, { method, params });
 
     // Get auth headers if auth is configured
     let authHeaders: Record<string, string> = {};
@@ -188,6 +190,7 @@ export class AwpClient {
     };
 
     let response = await doRequest();
+    console.log(`[AwpClient] Response status: ${response.status} ${response.statusText}`);
 
     // Handle 401 with auth flow
     if (response.status === 401 && this.auth) {
@@ -226,9 +229,11 @@ export class AwpClient {
     };
 
     if (result.error) {
+      console.error(`[AwpClient] RPC error:`, result.error);
       throw new Error(`RPC error: ${result.error.message}`);
     }
 
+    console.log(`[AwpClient] Response result:`, JSON.stringify(result.result, null, 2));
     return result.result;
   }
 

@@ -135,9 +135,20 @@ Use {{flux_fill}} with a mask to fill specific areas:
 3. **Safety Tolerance**: Adjust based on content needs (0=strict, 6=permissive)
 4. **Seed Usage**: Save seeds to reproduce or iterate on good results
 
+## Important: Language Requirements
+
+**⚠️ All prompts MUST be in English!**
+
+FLUX APIs only support English prompts. If the user provides a prompt in another language (e.g., Chinese, Japanese, Spanish), you MUST:
+1. Translate the prompt to English
+2. Enhance with descriptive keywords while preserving the original intent
+
+Example: "可爱的男孩遛狗" → "A cute young boy walking a friendly dog in a sunny park, warm atmosphere, heartwarming scene, high quality"
+
 ## Limitations
 
 - Async processing with polling (may take 10-60 seconds)
 - Maximum dimensions: 1440x1440 pixels
 - Some content filtered by safety systems
 - API rate limits apply
+- **Prompts must be in English only**

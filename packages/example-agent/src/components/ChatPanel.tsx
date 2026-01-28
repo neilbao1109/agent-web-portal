@@ -14,12 +14,14 @@ import {
   CircularProgress,
   Chip,
   Collapse,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
-import { Send, Stop, ExpandMore, ExpandLess, Build } from '@mui/icons-material';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Send, Stop, ExpandMore, ExpandLess, Build, Code } from '@mui/icons-material';
 import type { Message } from '../storage';
 import type { AgentState, StreamingMessage } from '../hooks/useAgent';
+import { BlobMarkdown } from './BlobMarkdown';
+import { useStorage } from '../contexts/StorageContext';
 
 export interface ChatPanelProps {
   messages: Message[];
@@ -93,43 +95,7 @@ export function ChatPanel({
 
         {/* Streaming message */}
         {streamingMessage && (
-          <Box sx={{ mb: 2 }}>
-            <Paper
-              sx={{
-                p: 2,
-                maxWidth: '80%',
-                bgcolor: 'grey.100',
-                borderRadius: 2,
-              }}
-            >
-              {streamingMessage.content && (
-                <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-child': { mb: 0 } }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {streamingMessage.content}
-                  </ReactMarkdown>
-                </Box>
-              )}
-
-              {streamingMessage.toolCalls.length > 0 && (
-                <Box sx={{ mt: 1 }}>
-                  {streamingMessage.toolCalls.map((tc) => (
-                    <Chip
-                      key={tc.id}
-                      icon={tc.isComplete ? <Build /> : <CircularProgress size={14} />}
-                      label={tc.name}
-                      size="small"
-                      variant="outlined"
-                      sx={{ mr: 0.5, mb: 0.5 }}
-                    />
-                  ))}
-                </Box>
-              )}
-
-              {!streamingMessage.content && streamingMessage.toolCalls.length === 0 && (
-                <CircularProgress size={20} />
-              )}
-            </Paper>
-          </Box>
+          <StreamingMessageBubble streamingMessage={streamingMessage} />
         )}
 
         {/* Error */}
@@ -204,6 +170,8 @@ export function ChatPanel({
  */
 function MessageBubble({ message }: { message: Message }) {
   const [toolExpanded, setToolExpanded] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const storage = useStorage();
 
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -231,28 +199,74 @@ function MessageBubble({ message }: { message: Message }) {
           borderRadius: 2,
         }}
       >
+        {/* Raw/Markdown Toggle for assistant messages */}
+        {isAssistant && message.content && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={showRaw}
+                  onChange={(e) => setShowRaw(e.target.checked)}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Code fontSize="small" />
+                  <Typography variant="caption">Raw</Typography>
+                </Box>
+              }
+              sx={{ m: 0 }}
+            />
+          </Box>
+        )}
+
         {/* Content */}
         {message.content && (
-          <Box
-            sx={{
-              '& > *:first-of-type': { mt: 0 },
-              '& > *:last-child': { mb: 0 },
-              '& code': {
-                bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                px: 0.5,
-                borderRadius: 0.5,
-                fontFamily: 'monospace',
-              },
-              '& pre': {
-                bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+          showRaw ? (
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
                 p: 1,
+                bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                 borderRadius: 1,
+                fontSize: '0.8rem',
                 overflow: 'auto',
-              },
-            }}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-          </Box>
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontFamily: 'monospace',
+              }}
+            >
+              {message.content}
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                '& > *:first-of-type': { mt: 0 },
+                '& > *:last-child': { mb: 0 },
+                '& code': {
+                  bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  px: 0.5,
+                  borderRadius: 0.5,
+                  fontFamily: 'monospace',
+                },
+                '& pre': {
+                  bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  p: 1,
+                  borderRadius: 1,
+                  overflow: 'auto',
+                },
+                '& img': {
+                  maxWidth: '100%',
+                  borderRadius: 1,
+                  mt: 1,
+                },
+              }}
+            >
+              <BlobMarkdown storage={storage ?? undefined}>{message.content}</BlobMarkdown>
+            </Box>
+          )
         )}
 
         {/* Tool calls */}
@@ -310,6 +324,52 @@ function MessageBubble({ message }: { message: Message }) {
               </Box>
             </Collapse>
           </Box>
+        )}
+      </Paper>
+    </Box>
+  );
+}
+/**
+ * Streaming Message Bubble Component
+ */
+function StreamingMessageBubble({ streamingMessage }: { streamingMessage: StreamingMessage }) {
+  const storage = useStorage();
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Paper
+        sx={{
+          p: 2,
+          maxWidth: '80%',
+          bgcolor: 'grey.100',
+          borderRadius: 2,
+        }}
+      >
+        {streamingMessage.content && (
+          <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-child': { mb: 0 } }}>
+            <BlobMarkdown storage={storage ?? undefined}>
+              {streamingMessage.content}
+            </BlobMarkdown>
+          </Box>
+        )}
+
+        {streamingMessage.toolCalls.length > 0 && (
+          <Box sx={{ mt: 1 }}>
+            {streamingMessage.toolCalls.map((tc) => (
+              <Chip
+                key={tc.id}
+                icon={tc.isComplete ? <Build /> : <CircularProgress size={14} />}
+                label={tc.name}
+                size="small"
+                variant="outlined"
+                sx={{ mr: 0.5, mb: 0.5 }}
+              />
+            ))}
+          </Box>
+        )}
+
+        {!streamingMessage.content && streamingMessage.toolCalls.length === 0 && (
+          <CircularProgress size={20} />
         )}
       </Paper>
     </Box>

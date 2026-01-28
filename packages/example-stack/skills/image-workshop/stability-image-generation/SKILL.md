@@ -149,8 +149,15 @@ Use {{inpaint}} to fill masked areas with new content:
 3. **Control Strength**: Start with 0.7 for {{sketch}} and {{structure}}, adjust as needed
 4. **Quality Masks**: Clean, precise masks produce better results with {{inpaint}} and {{erase}}
 
+## Important: Language Requirements
+
+**⚠️ All prompts MUST be in English!**
+
+Stability AI's APIs only support English prompts. If the user provides a prompt in another language (e.g., Chinese, Japanese, Spanish), you MUST translate it to English before calling any tool. Enhance the translated prompt with descriptive English keywords while preserving the original intent.
+
 ## Limitations
 
 - Maximum image resolution: 2048x2048 for most operations
 - Processing time varies by complexity
 - Some content may be filtered by safety systems
+- **Prompts must be in English only**

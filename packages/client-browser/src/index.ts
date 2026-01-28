@@ -41,3 +41,4 @@ export {
 // Storage implementations
 export { IndexedDBKeyStorage, type IndexedDBKeyStorageOptions } from "./indexed-db-storage.ts";
 export { LocalStorageKeyStorage, type LocalStorageKeyStorageOptions } from "./local-storage.ts";
+export { HttpStorageProvider, type HttpStorageProviderOptions } from "./http-storage.ts";
