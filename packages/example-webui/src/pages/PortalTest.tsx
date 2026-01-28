@@ -839,10 +839,11 @@ export default function PortalTest() {
         // For production with explicit API_BASE, use that instead.
         const apiOrigin = API_BASE || window.location.origin;
 
-        // For input blob fields, get the presigned URL from args
-        // The URL should be:
-        // 1. A full URL returned from prepare-upload (use as-is)
-        // 2. A legacy relative path like /api/blob/temp/xxx (convert to full URL)
+        // For input blob fields, resolve the URI to a presigned URL
+        // Supported formats:
+        // 1. Full URL (http:// or https://) - use as-is
+        // 2. Relative path (/api/blob/...) - convert to full URL
+        // 3. S3 key (output/output-xxx, temp/xxx, images/xxx) - resolve via /api/blob/files/
         for (const field of inputBlobs) {
           const value = args[field];
           if (typeof value === 'string') {
@@ -850,8 +851,11 @@ export default function PortalTest() {
               // Already a full URL
               input[field] = value;
             } else if (value.startsWith('/api/blob/')) {
-              // Legacy relative path - convert to full URL using apiOrigin
+              // Relative API path - convert to full URL using apiOrigin
               input[field] = `${apiOrigin}${value}`;
+            } else if (value.startsWith('output/') || value.startsWith('temp/') || value.startsWith('images/')) {
+              // S3 key from previous output - resolve via /api/blob/files/ endpoint
+              input[field] = `${apiOrigin}/api/blob/files/${encodeURIComponent(value)}`;
             }
           }
         }
@@ -861,10 +865,11 @@ export default function PortalTest() {
         for (const field of outputBlobs) {
           const res = await fetch(`${API_BASE}/api/blob/prepare-download`, { method: 'POST' });
           if (res.ok) {
-            const data = await res.json() as { id: string; writeUrl: string; readUrl: string };
+            const data = await res.json() as { id: string; key: string; writeUrl: string; readUrl: string };
             // Server returns absolute URLs, use them directly
             output[field] = data.writeUrl;
-            outputUri[field] = data.id; // Use ID as the permanent URI
+            // Use S3 key as the permanent URI (can be used as input in subsequent calls)
+            outputUri[field] = data.key;
             // Save readUrl for displaying the image after the call
             newOutputBlobUrls[field] = data.readUrl;
           }

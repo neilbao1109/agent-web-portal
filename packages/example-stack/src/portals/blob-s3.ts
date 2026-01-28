@@ -141,6 +141,7 @@ export async function getTempUploadS3(
  */
 export async function createOutputBlobSlotS3(): Promise<{
   id: string;
+  key: string;
   writeUrl: string;
   readUrl: string;
   expiresAt: string;
@@ -174,6 +175,7 @@ export async function createOutputBlobSlotS3(): Promise<{
 
   return {
     id,
+    key, // S3 key for use as input in subsequent calls
     writeUrl,
     readUrl,
     expiresAt: expiresAt.toISOString(),
