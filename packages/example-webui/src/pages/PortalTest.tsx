@@ -872,6 +872,10 @@ export default function PortalTest() {
             outputUri[field] = data.key;
             // Save readUrl for displaying the image after the call
             newOutputBlobUrls[field] = data.readUrl;
+          } else {
+            // Handle blob storage not configured or other errors
+            const errorData = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+            throw new Error(`Failed to prepare output blob for '${field}': ${errorData.error || res.statusText}`);
           }
         }
         setOutputBlobUrls(newOutputBlobUrls);
@@ -905,6 +909,8 @@ export default function PortalTest() {
     } catch (err) {
       if (err instanceof SyntaxError) {
         setError('Invalid JSON in arguments');
+      } else if (err instanceof Error) {
+        setError(err.message);
       } else {
         setError('Failed to call tool');
       }
