@@ -75,62 +75,6 @@ const TEST_USERS: Record<string, { password: string; userId: string }> = {
   demo: { password: "demo", userId: "demo-user-001" },
 };
 
-/**
- * Create S3Client with LocalStack support
- * Reads env vars at call time to ensure they're available
- */
-async function createS3Client() {
-  const { S3Client } = await import("@aws-sdk/client-s3");
-
-  // Read S3_ENDPOINT at call time (not module load time)
-  const s3Endpoint = process.env.S3_ENDPOINT ?? "";
-
-  // Support LocalStack/MinIO for local development
-  if (s3Endpoint) {
-    console.log(`[S3] Using LocalStack endpoint: ${s3Endpoint}`);
-    return new S3Client({
-      region: AWS_REGION,
-      endpoint: s3Endpoint,
-      forcePathStyle: true, // Required for LocalStack/MinIO
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "test",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "test",
-      },
-    });
-  }
-
-  console.log("[S3] Using default AWS S3");
-  return new S3Client({ region: AWS_REGION });
-}
-
-/**
- * Create S3Client for generating presigned URLs that clients can access
- * Uses S3_PUBLIC_ENDPOINT (localhost) instead of S3_ENDPOINT (host.docker.internal)
- */
-async function createS3ClientForPresignedUrls() {
-  const { S3Client } = await import("@aws-sdk/client-s3");
-
-  // S3_PUBLIC_ENDPOINT is the endpoint accessible from client machines (e.g., localhost:4566)
-  // S3_ENDPOINT is the endpoint accessible from Lambda container (e.g., host.docker.internal:4566)
-  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT ?? "";
-
-  if (publicEndpoint) {
-    console.log(`[S3] Using public endpoint for presigned URLs: ${publicEndpoint}`);
-    return new S3Client({
-      region: AWS_REGION,
-      endpoint: publicEndpoint,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "test",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "test",
-      },
-    });
-  }
-
-  // Fall back to regular S3 client
-  return createS3Client();
-}
-
 // =============================================================================
 // Auth Stores
 // =============================================================================
@@ -264,8 +208,8 @@ async function getSkillsManifestFromS3(portalName: string): Promise<Record<strin
   }
 
   try {
-    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-    const s3 = await createS3Client();
+    const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const s3 = new S3Client({});
 
     const response = await s3.send(
       new GetObjectCommand({
@@ -1307,8 +1251,8 @@ export async function handler(
       // GET /portals/{portal}/skills - List skills for this portal
       if (!skillPath && httpMethod === "GET") {
         try {
-          const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-          const s3 = await createS3Client();
+          const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+          const s3 = new S3Client({});
 
           try {
             const response = await s3.send(
@@ -1357,11 +1301,11 @@ export async function handler(
         const skillName = skillPath.slice(0, -".zip".length);
 
         try {
-          const { GetObjectCommand, HeadObjectCommand } = await import(
+          const { S3Client, GetObjectCommand, HeadObjectCommand } = await import(
             "@aws-sdk/client-s3"
           );
           const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-          const s3 = await createS3Client();
+          const s3 = new S3Client({});
           const key = `skills/${portalName}/${skillName}.zip`;
 
           // Check if skill exists
@@ -1382,12 +1326,9 @@ export async function handler(
             throw s3Error;
           }
 
-          // Use public endpoint client for presigned URLs (localhost instead of host.docker.internal)
-          const s3ForPresign = await createS3ClientForPresignedUrls();
-
           // Generate presigned URL and redirect
           const presignedUrl = await getSignedUrl(
-            s3ForPresign,
+            s3,
             new GetObjectCommand({
               Bucket: bucketName,
               Key: key,

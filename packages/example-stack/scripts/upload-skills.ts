@@ -23,13 +23,10 @@
  *   bun run scripts/upload-skills.ts              # Package only (no upload)
  *   bun run scripts/upload-skills.ts --stack      # Auto-detect bucket from CloudFormation stack
  *   bun run scripts/upload-skills.ts <bucket>     # Upload to specific bucket
- *   bun run scripts/upload-skills.ts --local      # Upload to LocalStack S3
  *
  * Environment:
- *   AWS_PROFILE   - AWS profile to use (uses default credential chain if not set)
- *   STACK_NAME    - CloudFormation stack name (default: awp-examples)
- *   S3_ENDPOINT   - S3 endpoint URL for LocalStack/MinIO (e.g., http://localhost:4566)
- *   BLOB_BUCKET   - Default bucket name when using --local
+ *   AWS_PROFILE - AWS profile to use (uses default credential chain if not set)
+ *   STACK_NAME  - CloudFormation stack name (default: awp-examples)
  */
 
 // Polyfill for JSZip
@@ -45,28 +42,8 @@ const SKILLS_DIR = join(import.meta.dir, "../skills");
 const DIST_DIR = join(import.meta.dir, "../dist/skills");
 const DEFAULT_STACK_NAME = process.env.STACK_NAME || "awp-examples";
 
-// LocalStack/S3-compatible endpoint
-const S3_ENDPOINT = process.env.S3_ENDPOINT || "";
-const DEFAULT_LOCAL_BUCKET = process.env.BLOB_BUCKET || "awp-examples-blobs";
-
-/**
- * Create S3Client with LocalStack support
- */
-function createS3Client(): S3Client {
-  if (S3_ENDPOINT) {
-    console.log(`🔌 Using S3 endpoint: ${S3_ENDPOINT}`);
-    return new S3Client({
-      region: process.env.AWS_REGION || "us-east-1",
-      endpoint: S3_ENDPOINT,
-      forcePathStyle: true, // Required for LocalStack/MinIO
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "test",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "test",
-      },
-    });
-  }
-  return new S3Client({});
-}
+// AWS client config - uses default credential chain (env vars, ~/.aws/credentials, IAM role, etc.)
+const awsConfig = {};
 
 interface SkillFrontmatter {
   name: string;
@@ -171,7 +148,7 @@ async function packageSkill(
  */
 async function getBucketFromStack(stackName: string): Promise<string | null> {
   try {
-    const cf = new CloudFormationClient({});
+    const cf = new CloudFormationClient(awsConfig);
     const response = await cf.send(new DescribeStacksCommand({ StackName: stackName }));
 
     const outputs = response.Stacks?.[0]?.Outputs || [];
@@ -187,20 +164,6 @@ async function getBucketFromStack(stackName: string): Promise<string | null> {
 async function main() {
   let bucketName = process.argv[2];
   const stackName = process.argv[3] || DEFAULT_STACK_NAME;
-
-  // Handle --local flag for LocalStack
-  if (bucketName === "--local") {
-    if (!S3_ENDPOINT) {
-      console.log("❌ S3_ENDPOINT environment variable not set.");
-      console.log("   Set S3_ENDPOINT=http://localhost:4566 for LocalStack");
-      process.exit(1);
-    }
-    bucketName = DEFAULT_LOCAL_BUCKET;
-    console.log(`🐳 Using LocalStack S3`);
-    console.log(`   Endpoint: ${S3_ENDPOINT}`);
-    console.log(`   Bucket: ${bucketName}`);
-    console.log("");
-  }
 
   // Handle --stack flag to auto-detect bucket
   if (bucketName === "--stack") {
@@ -224,7 +187,6 @@ async function main() {
     console.log("Usage:");
     console.log("  bun run scripts/upload-skills.ts              # Package only");
     console.log("  bun run scripts/upload-skills.ts --stack      # Auto-detect bucket from stack");
-    console.log("  bun run scripts/upload-skills.ts --local      # Upload to LocalStack S3");
     console.log("  bun run scripts/upload-skills.ts <bucket>     # Upload to specific bucket");
     console.log("");
     console.log("Skills will be packaged to dist/skills/");
@@ -252,7 +214,7 @@ async function main() {
     }
   }
 
-  const s3 = bucketName ? createS3Client() : null;
+  const s3 = bucketName ? new S3Client(awsConfig) : null;
 
   if (isPerPortalStructure) {
     // Per-portal structure: skills/{portal}/{skill-name}

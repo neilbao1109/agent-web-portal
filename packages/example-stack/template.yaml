@@ -128,10 +128,6 @@ Resources:
           NODE_OPTIONS: "--enable-source-maps"
           # Image Workshop uses image-workshop/ prefix in BLOB_BUCKET
           IMAGE_STORAGE_PREFIX: "image-workshop/"
-          # LocalStack/S3-compatible endpoint for local development (empty in production)
-          S3_ENDPOINT: ""
-          # Public S3 endpoint for presigned URLs (localhost instead of host.docker.internal)
-          S3_PUBLIC_ENDPOINT: ""
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AuthTable
