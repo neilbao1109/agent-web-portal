@@ -76,6 +76,13 @@ export {
   type AwpToolSchema,
   type ToolCallResult,
 } from "./client.ts";
+// Schema transform exports
+export {
+  type BlobSchemaInfo,
+  extractBlobSchemaInfo,
+  transformSchemaToLlmFacing,
+  transformToolToLlmFacing,
+} from "./schema-transform.ts";
 export { S3StorageProvider, type S3StorageProviderOptions } from "./storage/s3.ts";
 // Storage provider exports
 export type { PresignedUrlOptions, PresignedUrlPair, StorageProvider } from "./storage/types.ts";
