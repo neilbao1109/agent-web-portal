@@ -41,14 +41,15 @@ import {
   AutoAwesome as SkillIcon,
 } from '@mui/icons-material';
 
+/** Blob field descriptor with direction and description */
+interface BlobFieldDescriptor {
+  kind: 'input' | 'output';
+  description: string;
+}
+
 interface AwpExtension {
-  /** Simple blob field lists - just the parameter names */
-  blob?: {
-    /** Input blob parameter names */
-    input?: string[];
-    /** Output blob parameter names */
-    output?: string[];
-  };
+  /** Blob field descriptors - maps field names to their metadata */
+  blob?: Record<string, BlobFieldDescriptor>;
 }
 
 interface Tool {
@@ -768,7 +769,11 @@ export default function PortalTest() {
 
     // Get output blob fields - these are handled automatically by the client
     // and should not be included in the default arguments
-    const outputBlobFields = tool._awp?.blob?.output ?? [];
+    const outputBlobFields = tool._awp?.blob
+      ? Object.entries(tool._awp.blob)
+          .filter(([_, descriptor]) => descriptor.kind === 'output')
+          .map(([fieldName]) => fieldName)
+      : [];
 
     // Generate default arguments from schema
     const schema = tool.inputSchema;
@@ -908,15 +913,21 @@ export default function PortalTest() {
   // Get input blob fields for current tool
   const getInputBlobFields = useCallback((): string[] => {
     const tool = tools.find((t) => t.name === selectedTool);
-    if (!tool?._awp?.blob?.input) return [];
-    return [...tool._awp.blob.input];
+    if (!tool?._awp?.blob) return [];
+    // New format: blob is Record<string, { kind, description }>
+    return Object.entries(tool._awp.blob)
+      .filter(([_, descriptor]) => descriptor.kind === 'input')
+      .map(([fieldName]) => fieldName);
   }, [tools, selectedTool]);
 
   // Get output blob fields for current tool
   const getOutputBlobFields = useCallback((): string[] => {
     const tool = tools.find((t) => t.name === selectedTool);
-    if (!tool?._awp?.blob?.output) return [];
-    return [...tool._awp.blob.output];
+    if (!tool?._awp?.blob) return [];
+    // New format: blob is Record<string, { kind, description }>
+    return Object.entries(tool._awp.blob)
+      .filter(([_, descriptor]) => descriptor.kind === 'output')
+      .map(([fieldName]) => fieldName);
   }, [tools, selectedTool]);
 
   // Handle file selection and upload for blob INPUT fields

@@ -176,7 +176,15 @@ export class ToolRegistry {
     // Validate blob context if tool has blobs
     if (hasInputBlobs || hasOutputBlobs) {
       if (!blobContext) {
-        throw new BlobContextError(name, "Tool requires blob context but none was provided");
+        const requiredFields = [
+          ...tool.inputBlobs.map((f) => `input.${f}`),
+          ...tool.outputBlobs.map((f) => `output.${f}`),
+        ];
+        throw new BlobContextError(
+          name,
+          `Tool requires blob context but none was provided. ` +
+            `Required _blobContext fields: ${requiredFields.join(", ")}`
+        );
       }
 
       // Validate input blob context
