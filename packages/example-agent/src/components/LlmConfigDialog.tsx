@@ -20,6 +20,8 @@ import {
   Alert,
   IconButton,
   InputAdornment,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import type { LlmConfig } from '../storage';
@@ -50,6 +52,8 @@ const PROVIDER_DEFAULTS: Record<ProviderId, { endpoint: string; models: string[]
 };
 
 export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmConfigDialogProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [providerId, setProviderId] = useState<ProviderId>('openai');
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -120,14 +124,27 @@ export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmCon
 
   const providerModels = PROVIDER_DEFAULTS[providerId].models;
 
+  // Common input style to prevent iOS zoom
+  const inputStyle = {
+    '& .MuiInputBase-root': {
+      fontSize: { xs: '16px', sm: 'inherit' },
+    },
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="sm" 
+      fullWidth
+      fullScreen={isMobile}
+    >
       <DialogTitle>LLM Configuration</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
 
-          <FormControl fullWidth>
+          <FormControl fullWidth sx={inputStyle}>
             <InputLabel>Provider</InputLabel>
             <Select
               value={providerId}
@@ -147,6 +164,7 @@ export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmCon
             fullWidth
             placeholder="https://api.openai.com/v1/chat/completions"
             helperText={providerId === 'custom' ? 'Must be OpenAI-compatible API' : undefined}
+            sx={inputStyle}
           />
 
           <TextField
@@ -155,6 +173,7 @@ export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmCon
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             fullWidth
+            sx={inputStyle}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
@@ -170,7 +189,7 @@ export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmCon
           />
 
           {providerModels.length > 0 ? (
-            <FormControl fullWidth>
+            <FormControl fullWidth sx={inputStyle}>
               <InputLabel>Model</InputLabel>
               <Select
                 value={model}
@@ -191,11 +210,12 @@ export function LlmConfigDialog({ open, onClose, onSave, currentConfig }: LlmCon
               onChange={(e) => setModel(e.target.value)}
               fullWidth
               placeholder="e.g., gpt-4o"
+              sx={inputStyle}
             />
           )}
         </Box>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
           {saving ? 'Saving...' : 'Save'}

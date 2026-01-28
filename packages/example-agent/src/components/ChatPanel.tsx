@@ -16,6 +16,8 @@ import {
   Collapse,
   Switch,
   FormControlLabel,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Send, Stop, ExpandMore, ExpandLess, Build, Code } from '@mui/icons-material';
 import type { Message } from '../storage';
@@ -68,12 +70,14 @@ export function ChatPanel({
     }
   };
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isProcessing = state !== 'idle' && state !== 'error';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Messages */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 1, sm: 2 } }}>
         {messages.length === 0 && !streamingMessage && (
           <Box
             sx={{
@@ -81,21 +85,22 @@ export function ChatPanel({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              px: 2,
             }}
           >
-            <Typography color="text.secondary">
+            <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
               Start a conversation or load a skill to begin.
             </Typography>
           </Box>
         )}
 
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} isMobile={isMobile} />
         ))}
 
         {/* Streaming message */}
         {streamingMessage && (
-          <StreamingMessageBubble streamingMessage={streamingMessage} />
+          <StreamingMessageBubble streamingMessage={streamingMessage} isMobile={isMobile} />
         )}
 
         {/* Error */}
@@ -109,7 +114,16 @@ export function ChatPanel({
       </Box>
 
       {/* Input */}
-      <Paper sx={{ p: 2, borderTop: 1, borderColor: 'divider' }} elevation={0}>
+      <Paper 
+        sx={{ 
+          p: { xs: 1.5, sm: 2 }, 
+          borderTop: 1, 
+          borderColor: 'divider',
+          // Safe area for mobile devices with home indicator
+          pb: { xs: 'max(env(safe-area-inset-bottom), 12px)', sm: 2 },
+        }} 
+        elevation={0}
+      >
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
           <TextField
             inputRef={inputRef}
@@ -122,23 +136,33 @@ export function ChatPanel({
             fullWidth
             size="small"
             disabled={isProcessing}
+            sx={{
+              '& .MuiInputBase-root': {
+                fontSize: { xs: '16px', sm: 'inherit' }, // Prevent zoom on iOS
+              },
+            }}
           />
           {isProcessing ? (
-            <IconButton onClick={onStop} color="error">
+            <IconButton onClick={onStop} color="error" size={isMobile ? 'medium' : 'large'}>
               <Stop />
             </IconButton>
           ) : (
-            <IconButton onClick={handleSend} color="primary" disabled={!input.trim()}>
+            <IconButton 
+              onClick={handleSend} 
+              color="primary" 
+              disabled={!input.trim()}
+              size={isMobile ? 'medium' : 'large'}
+            >
               <Send />
             </IconButton>
           )}
         </Box>
-        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           {state === 'streaming' && (
             <Chip
               size="small"
               icon={<CircularProgress size={12} />}
-              label="Generating..."
+              label={isMobile ? "..." : "Generating..."}
               variant="outlined"
             />
           )}
@@ -146,7 +170,7 @@ export function ChatPanel({
             <Chip
               size="small"
               icon={<CircularProgress size={12} />}
-              label="Calling tool..."
+              label={isMobile ? "Tool..." : "Calling tool..."}
               variant="outlined"
               color="secondary"
             />
@@ -155,7 +179,7 @@ export function ChatPanel({
             <Chip
               size="small"
               icon={<CircularProgress size={12} />}
-              label="Thinking..."
+              label={isMobile ? "..." : "Thinking..."}
               variant="outlined"
             />
           )}
@@ -168,7 +192,7 @@ export function ChatPanel({
 /**
  * Message Bubble Component
  */
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boolean }) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const storage = useStorage();
@@ -185,15 +209,15 @@ function MessageBubble({ message }: { message: Message }) {
   return (
     <Box
       sx={{
-        mb: 2,
+        mb: { xs: 1.5, sm: 2 },
         display: 'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
       }}
     >
       <Paper
         sx={{
-          p: 2,
-          maxWidth: '80%',
+          p: { xs: 1.5, sm: 2 },
+          maxWidth: isMobile ? '90%' : '80%',
           bgcolor: isUser ? 'primary.main' : 'grey.100',
           color: isUser ? 'primary.contrastText' : 'text.primary',
           borderRadius: 2,
@@ -332,15 +356,15 @@ function MessageBubble({ message }: { message: Message }) {
 /**
  * Streaming Message Bubble Component
  */
-function StreamingMessageBubble({ streamingMessage }: { streamingMessage: StreamingMessage }) {
+function StreamingMessageBubble({ streamingMessage, isMobile }: { streamingMessage: StreamingMessage; isMobile?: boolean }) {
   const storage = useStorage();
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
       <Paper
         sx={{
-          p: 2,
-          maxWidth: '80%',
+          p: { xs: 1.5, sm: 2 },
+          maxWidth: isMobile ? '90%' : '80%',
           bgcolor: 'grey.100',
           borderRadius: 2,
         }}

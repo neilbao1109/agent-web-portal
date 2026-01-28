@@ -22,6 +22,8 @@ import {
   DialogActions,
   Alert,
   Paper,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Add, Delete, Refresh, Link as LinkIcon } from '@mui/icons-material';
 import type { RegisteredEndpoint } from '../core';
@@ -41,6 +43,8 @@ export function EndpointManager({
   onUnregister,
   onRefresh,
 }: EndpointManagerProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [url, setUrl] = useState('');
   const [alias, setAlias] = useState('');
@@ -77,10 +81,12 @@ export function EndpointManager({
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6">AWP Endpoints</Typography>
-        <Box>
-          <IconButton onClick={onRefresh} disabled={isLoading} title="Refresh">
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+          AWP Endpoints
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <IconButton onClick={onRefresh} disabled={isLoading} title="Refresh" size="small">
             <Refresh />
           </IconButton>
           <Button
@@ -95,14 +101,14 @@ export function EndpointManager({
       </Box>
 
       {endpoints.length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }} variant="outlined">
-          <LinkIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-          <Typography color="text.secondary">
+        <Paper sx={{ p: { xs: 2, sm: 3 }, textAlign: 'center' }} variant="outlined">
+          <LinkIcon sx={{ fontSize: { xs: 36, sm: 48 }, color: 'text.secondary', mb: 1 }} />
+          <Typography color="text.secondary" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             No endpoints registered. Add an AWP endpoint to get started.
           </Typography>
         </Paper>
       ) : (
-        <List>
+        <List disablePadding>
           {endpoints.map((endpoint) => (
             <ListItem
               key={endpoint.endpointId}
@@ -111,24 +117,37 @@ export function EndpointManager({
                 borderColor: 'divider',
                 borderRadius: 1,
                 mb: 1,
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'flex-start' : 'center',
+                pr: isMobile ? 1 : 6,
+                position: 'relative',
               }}
             >
               <ListItemText
                 primary={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body1" fontWeight="medium">
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 0.5, 
+                    flexWrap: 'wrap',
+                    pr: isMobile ? 4 : 0,
+                  }}>
+                    <Typography variant="body2" fontWeight="medium" noWrap sx={{ maxWidth: '100%' }}>
                       {endpoint.alias || endpoint.endpointId}
                     </Typography>
+                    {!isMobile && (
+                      <Chip
+                        label={endpoint.endpointId}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}
+                      />
+                    )}
                     <Chip
-                      label={endpoint.endpointId}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontFamily: 'monospace' }}
-                    />
-                    <Chip
-                      label={endpoint.isAuthenticated ? 'Authenticated' : 'Not Authenticated'}
+                      label={endpoint.isAuthenticated ? 'Auth' : 'No Auth'}
                       size="small"
                       color={endpoint.isAuthenticated ? 'success' : 'warning'}
+                      sx={{ fontSize: '0.65rem', height: 20 }}
                     />
                   </Box>
                 }
@@ -136,28 +155,42 @@ export function EndpointManager({
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    sx={{ 
+                      fontFamily: 'monospace', 
+                      fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                      wordBreak: 'break-all',
+                    }}
                   >
                     {endpoint.url}
                   </Typography>
                 }
+                sx={{ my: 0 }}
               />
-              <ListItemSecondaryAction>
-                <IconButton
-                  edge="end"
-                  onClick={() => onUnregister(endpoint.endpointId)}
-                  title="Remove endpoint"
-                >
-                  <Delete />
-                </IconButton>
-              </ListItemSecondaryAction>
+              <IconButton
+                onClick={() => onUnregister(endpoint.endpointId)}
+                title="Remove endpoint"
+                size="small"
+                sx={{
+                  position: isMobile ? 'absolute' : 'static',
+                  top: isMobile ? 8 : 'auto',
+                  right: isMobile ? 8 : 'auto',
+                }}
+              >
+                <Delete fontSize="small" />
+              </IconButton>
             </ListItem>
           ))}
         </List>
       )}
 
       {/* Add Endpoint Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={dialogOpen} 
+        onClose={() => setDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Add AWP Endpoint</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
@@ -170,6 +203,11 @@ export function EndpointManager({
               fullWidth
               placeholder="https://example.com/api/awp"
               autoFocus
+              sx={{
+                '& .MuiInputBase-root': {
+                  fontSize: { xs: '16px', sm: 'inherit' },
+                },
+              }}
             />
 
             <TextField
@@ -179,10 +217,15 @@ export function EndpointManager({
               fullWidth
               placeholder="My Portal"
               helperText="A friendly name for this endpoint"
+              sx={{
+                '& .MuiInputBase-root': {
+                  fontSize: { xs: '16px', sm: 'inherit' },
+                },
+              }}
             />
           </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleRegister} variant="contained" disabled={registering}>
             {registering ? 'Adding...' : 'Add'}

@@ -2,8 +2,8 @@
  * AWP Agent - Main Application
  */
 
-import { useState } from 'react';
-import { ThemeProvider, CssBaseline } from '@mui/material';
+import { useCallback, useRef, useState, useEffect } from 'react';
+import { ThemeProvider, CssBaseline, useMediaQuery } from '@mui/material';
 import {
   Box,
   Drawer,
@@ -16,12 +16,14 @@ import {
   Divider,
   Button,
   Chip,
+  SwipeableDrawer,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   Settings,
   Extension,
   Link as LinkIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { theme } from './theme';
 import {
@@ -33,17 +35,28 @@ import {
 } from './components';
 import { useLlmConfig, useAwpManager, useConversations, useAgent } from './hooks';
 import { StorageContextProvider } from './contexts/StorageContext';
+import type { Message } from './storage';
 
 const LEFT_DRAWER_WIDTH = 280;
 const RIGHT_DRAWER_WIDTH = 300;
+const MOBILE_DRAWER_WIDTH = '85vw';
 
 type RightTab = 'skills' | 'endpoints';
 
 export function App() {
-  const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
-  const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [rightTab, setRightTab] = useState<RightTab>('skills');
   const [llmConfigOpen, setLlmConfigOpen] = useState(false);
+
+  // On desktop, open drawers by default
+  useEffect(() => {
+    if (!isMobile) {
+      setLeftDrawerOpen(true);
+      setRightDrawerOpen(true);
+    }
+  }, [isMobile]);
 
   // Hooks
   const { config, isConfigured, adapter, saveConfig } = useLlmConfig();
@@ -62,7 +75,26 @@ export function App() {
     createConversation,
     loadConversation,
     deleteConversation,
+    addMessage,
   } = useConversations();
+
+  // Use ref to avoid stale closures in handleMessageAdded
+  const currentConversationRef = useRef(currentConversation);
+  currentConversationRef.current = currentConversation;
+  const addMessageRef = useRef(addMessage);
+  addMessageRef.current = addMessage;
+
+  // Handle message persistence callback - uses refs to avoid recreating on every render
+  const handleMessageAdded = useCallback(async (message: Message) => {
+    if (currentConversationRef.current) {
+      try {
+        await addMessageRef.current(message);
+      } catch (err) {
+        console.error("Failed to persist message:", err);
+      }
+    }
+  }, []);
+
   const {
     state,
     messages,
@@ -73,9 +105,10 @@ export function App() {
     loadSkill,
     unloadSkill,
     clearConversation,
+    loadMessages,
     stop,
     error,
-  } = useAgent({ manager, adapter });
+  } = useAgent({ manager, adapter, onMessageAdded: handleMessageAdded });
 
   const handleNewConversation = async () => {
     await createConversation();
@@ -83,9 +116,87 @@ export function App() {
   };
 
   const handleSelectConversation = async (id: string) => {
-    await loadConversation(id);
-    // TODO: Restore conversation state to agent context
+    const conversation = await loadConversation(id);
+    if (conversation) {
+      loadMessages(conversation.messages);
+    }
   };
+
+  // Drawer content for left side
+  const leftDrawerContent = (
+    <>
+      {isMobile && (
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="h6">Conversations</Typography>
+          <IconButton onClick={() => setLeftDrawerOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </Toolbar>
+      )}
+      {!isMobile && <Toolbar />}
+      <ConversationList
+        conversations={conversations}
+        currentId={currentConversation?.id ?? null}
+        onSelect={(id) => {
+          handleSelectConversation(id);
+          if (isMobile) setLeftDrawerOpen(false);
+        }}
+        onCreate={async () => {
+          await handleNewConversation();
+          if (isMobile) setLeftDrawerOpen(false);
+        }}
+        onDelete={deleteConversation}
+      />
+    </>
+  );
+
+  // Drawer content for right side
+  const rightDrawerContent = (
+    <>
+      {isMobile && (
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="h6">Skills & Endpoints</Typography>
+          <IconButton onClick={() => setRightDrawerOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </Toolbar>
+      )}
+      {!isMobile && <Toolbar />}
+      <Tabs
+        value={rightTab}
+        onChange={(_, value) => setRightTab(value)}
+        variant="fullWidth"
+      >
+        <Tab icon={<Extension />} label="Skills" value="skills" />
+        <Tab icon={<LinkIcon />} label="Endpoints" value="endpoints" />
+      </Tabs>
+      <Divider />
+
+      {rightTab === 'skills' && (
+        <SkillSidebar
+          availableSkills={availableSkills.length > 0 ? availableSkills : skills}
+          activeSkillIds={activeSkillIds}
+          onLoadSkill={loadSkill}
+          onUnloadSkill={unloadSkill}
+        />
+      )}
+
+      {rightTab === 'endpoints' && (
+        <Box sx={{ p: 2 }}>
+          <EndpointManager
+            endpoints={endpoints}
+            isLoading={endpointsLoading}
+            onRegister={registerEndpoint}
+            onUnregister={unregisterEndpoint}
+            onRefresh={refresh}
+          />
+        </Box>
+      )}
+    </>
+  );
+
+  const drawerWidth = isMobile ? MOBILE_DRAWER_WIDTH : LEFT_DRAWER_WIDTH;
+  const rightDrawerWidth = isMobile ? MOBILE_DRAWER_WIDTH : RIGHT_DRAWER_WIDTH;
 
   return (
     <ThemeProvider theme={theme}>
@@ -104,30 +215,37 @@ export function App() {
             borderColor: 'divider',
           }}
         >
-          <Toolbar>
+          <Toolbar sx={{ px: { xs: 1, sm: 2 } }}>
             <IconButton
               edge="start"
               onClick={() => setLeftDrawerOpen(!leftDrawerOpen)}
-              sx={{ mr: 2 }}
+              sx={{ mr: { xs: 1, sm: 2 } }}
             >
               <MenuIcon />
             </IconButton>
 
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                flexGrow: 1,
+                fontSize: { xs: '1rem', sm: '1.25rem' },
+              }}
+            >
               AWP Agent
             </Typography>
 
-            {/* Status indicators */}
+            {/* Status indicators - hide some on mobile */}
             {!isConfigured && (
               <Chip
-                label="LLM not configured"
+                label={isMobile ? "Configure" : "LLM not configured"}
                 color="warning"
                 size="small"
-                sx={{ mr: 1 }}
+                sx={{ mr: 1, display: { xs: 'none', sm: 'flex' } }}
                 onClick={() => setLlmConfigOpen(true)}
               />
             )}
-            {isConfigured && config && (
+            {isConfigured && config && !isMobile && (
               <Chip
                 label={config.model}
                 size="small"
@@ -135,7 +253,7 @@ export function App() {
                 sx={{ mr: 1 }}
               />
             )}
-            {endpoints.length > 0 && (
+            {endpoints.length > 0 && !isMobile && (
               <Chip
                 label={`${endpoints.length} endpoint${endpoints.length > 1 ? 's' : ''}`}
                 size="small"
@@ -154,28 +272,39 @@ export function App() {
         </AppBar>
 
         {/* Left Drawer - Conversations */}
-        <Drawer
-          variant="persistent"
-          anchor="left"
-          open={leftDrawerOpen}
-          sx={{
-            width: leftDrawerOpen ? LEFT_DRAWER_WIDTH : 0,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: LEFT_DRAWER_WIDTH,
-              boxSizing: 'border-box',
-            },
-          }}
-        >
-          <Toolbar />
-          <ConversationList
-            conversations={conversations}
-            currentId={currentConversation?.id ?? null}
-            onSelect={handleSelectConversation}
-            onCreate={handleNewConversation}
-            onDelete={deleteConversation}
-          />
-        </Drawer>
+        {isMobile ? (
+          <SwipeableDrawer
+            anchor="left"
+            open={leftDrawerOpen}
+            onClose={() => setLeftDrawerOpen(false)}
+            onOpen={() => setLeftDrawerOpen(true)}
+            sx={{
+              '& .MuiDrawer-paper': {
+                width: drawerWidth,
+                boxSizing: 'border-box',
+              },
+            }}
+            disableBackdropTransition
+          >
+            {leftDrawerContent}
+          </SwipeableDrawer>
+        ) : (
+          <Drawer
+            variant="persistent"
+            anchor="left"
+            open={leftDrawerOpen}
+            sx={{
+              width: leftDrawerOpen ? LEFT_DRAWER_WIDTH : 0,
+              flexShrink: 0,
+              '& .MuiDrawer-paper': {
+                width: LEFT_DRAWER_WIDTH,
+                boxSizing: 'border-box',
+              },
+            }}
+          >
+            {leftDrawerContent}
+          </Drawer>
+        )}
 
         {/* Main Content */}
         <Box
@@ -185,8 +314,9 @@ export function App() {
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            ml: leftDrawerOpen ? 0 : `-${LEFT_DRAWER_WIDTH}px`,
-            mr: rightDrawerOpen ? 0 : `-${RIGHT_DRAWER_WIDTH}px`,
+            // On mobile, no margin adjustment needed since drawers overlay
+            ml: isMobile ? 0 : (leftDrawerOpen ? 0 : `-${LEFT_DRAWER_WIDTH}px`),
+            mr: isMobile ? 0 : (rightDrawerOpen ? 0 : `-${RIGHT_DRAWER_WIDTH}px`),
             transition: (theme) =>
               theme.transitions.create(['margin'], {
                 easing: theme.transitions.easing.sharp,
@@ -205,14 +335,14 @@ export function App() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                p: 4,
+                p: { xs: 2, sm: 4 },
               }}
             >
-              <Settings sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h5" gutterBottom>
+              <Settings sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                 Configure LLM
               </Typography>
-              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
+              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center', px: 2 }}>
                 Set up your LLM API connection to start using the agent.
               </Typography>
               <Button
@@ -234,14 +364,14 @@ export function App() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                p: 4,
+                p: { xs: 2, sm: 4 },
               }}
             >
-              <LinkIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h5" gutterBottom>
+              <LinkIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                 Add an AWP Endpoint
               </Typography>
-              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
+              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center', px: 2 }}>
                 Connect to an AWP server to access skills and tools.
               </Typography>
               <Button
@@ -271,51 +401,39 @@ export function App() {
         </Box>
 
         {/* Right Drawer - Skills & Endpoints */}
-        <Drawer
-          variant="persistent"
-          anchor="right"
-          open={rightDrawerOpen}
-          sx={{
-            width: rightDrawerOpen ? RIGHT_DRAWER_WIDTH : 0,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: RIGHT_DRAWER_WIDTH,
-              boxSizing: 'border-box',
-            },
-          }}
-        >
-          <Toolbar />
-          <Tabs
-            value={rightTab}
-            onChange={(_, value) => setRightTab(value)}
-            variant="fullWidth"
+        {isMobile ? (
+          <SwipeableDrawer
+            anchor="right"
+            open={rightDrawerOpen}
+            onClose={() => setRightDrawerOpen(false)}
+            onOpen={() => setRightDrawerOpen(true)}
+            sx={{
+              '& .MuiDrawer-paper': {
+                width: rightDrawerWidth,
+                boxSizing: 'border-box',
+              },
+            }}
+            disableBackdropTransition
           >
-            <Tab icon={<Extension />} label="Skills" value="skills" />
-            <Tab icon={<LinkIcon />} label="Endpoints" value="endpoints" />
-          </Tabs>
-          <Divider />
-
-          {rightTab === 'skills' && (
-            <SkillSidebar
-              availableSkills={availableSkills.length > 0 ? availableSkills : skills}
-              activeSkillIds={activeSkillIds}
-              onLoadSkill={loadSkill}
-              onUnloadSkill={unloadSkill}
-            />
-          )}
-
-          {rightTab === 'endpoints' && (
-            <Box sx={{ p: 2 }}>
-              <EndpointManager
-                endpoints={endpoints}
-                isLoading={endpointsLoading}
-                onRegister={registerEndpoint}
-                onUnregister={unregisterEndpoint}
-                onRefresh={refresh}
-              />
-            </Box>
-          )}
-        </Drawer>
+            {rightDrawerContent}
+          </SwipeableDrawer>
+        ) : (
+          <Drawer
+            variant="persistent"
+            anchor="right"
+            open={rightDrawerOpen}
+            sx={{
+              width: rightDrawerOpen ? RIGHT_DRAWER_WIDTH : 0,
+              flexShrink: 0,
+              '& .MuiDrawer-paper': {
+                width: RIGHT_DRAWER_WIDTH,
+                boxSizing: 'border-box',
+              },
+            }}
+          >
+            {rightDrawerContent}
+          </Drawer>
+        )}
 
         {/* LLM Config Dialog */}
         <LlmConfigDialog
