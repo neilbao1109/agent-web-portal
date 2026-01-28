@@ -151,9 +151,9 @@ export class AwpClient {
     // Only create blob interceptor if storage is provided
     this.blobInterceptor = options.storage
       ? new BlobInterceptor({
-          storage: options.storage,
-          outputPrefix: options.outputPrefix,
-        })
+        storage: options.storage,
+        outputPrefix: options.outputPrefix,
+      })
       : null;
   }
 
