@@ -423,11 +423,30 @@ export class AwpClient {
   }
 
   /**
-   * List available tools with AWP blob handling applied (LLM-facing schema)
+   * List available tools with LLM-facing schema (for AI agents)
    *
    * Transforms Tool-facing schema to LLM-facing schema:
    * - Input blob params: { url, contentType? } -> { uri, contentType? }
-   * - Output blob params: { url, accept? } -> { accept? } (url removed)
+   * - Output blob params: { url, accept? } -> { accept?, prefix? } (url removed)
+   * - Output blob result will include: { uri, contentType? }
+   *
+   * Returns tool schemas where:
+   * - inputSchema has blob fields transformed for LLM
+   * - inputBlobFields lists fields that require { uri: "s3://..." } format
+   * - outputBlobFields lists fields that will appear in result.blobs
+   *
+   * Alias: listToolsForLlm()
+   */
+  async listTools(): Promise<{ tools: AwpToolSchema[] }> {
+    return this.listToolsForLlm();
+  }
+
+  /**
+   * List available tools with LLM-facing schema (for AI agents)
+   *
+   * Transforms Tool-facing schema to LLM-facing schema:
+   * - Input blob params: { url, contentType? } -> { uri, contentType? }
+   * - Output blob params: { url, accept? } -> { accept?, prefix? } (url removed)
    * - Output blob result will include: { uri, contentType? }
    *
    * Returns tool schemas where:
@@ -435,7 +454,7 @@ export class AwpClient {
    * - inputBlobFields lists fields that require { uri: "s3://..." } format
    * - outputBlobFields lists fields that will appear in result.blobs
    */
-  async listTools(): Promise<{ tools: AwpToolSchema[] }> {
+  async listToolsForLlm(): Promise<{ tools: AwpToolSchema[] }> {
     await this.ensureSchemasFetched();
 
     const tools: AwpToolSchema[] = [];
@@ -542,14 +561,27 @@ export class AwpClient {
   }
 
   /**
-   * Get the raw MCP tools list (without AWP processing)
-   * Use this if you need the original server response
+   * List available tools with Tool-facing schema (for debugging/MCP clients)
+   *
+   * Returns the original schema as received from the AWP server:
+   * - Input blob params: { url: string, contentType?: string }
+   * - Output blob params: { url: string, accept?: string }
+   * - Includes _awp extension with blob metadata
+   *
+   * Use this for debugging or when working with raw MCP protocol.
    */
-  async listToolsRaw(): Promise<McpToolsListResponse> {
+  async listToolsForTool(): Promise<McpToolsListResponse> {
     await this.ensureSchemasFetched();
     return {
       tools: Array.from(this.toolSchemaCache.values()).map((c) => c.schema),
     };
+  }
+
+  /**
+   * @deprecated Use listToolsForTool() instead
+   */
+  async listToolsRaw(): Promise<McpToolsListResponse> {
+    return this.listToolsForTool();
   }
 
   /**

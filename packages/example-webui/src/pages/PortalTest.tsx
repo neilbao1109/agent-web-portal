@@ -994,11 +994,11 @@ export default function PortalTest() {
     }
 
     const blobInfo = tool._awp.blob;
-    
+
     // Transform input blobs: change url -> uri
     for (const fieldName of Object.keys(blobInfo.input || {})) {
       if (!schema.properties[fieldName]) continue;
-      
+
       const prop = schema.properties[fieldName] as {
         properties?: Record<string, unknown>;
         required?: string[];
@@ -1016,11 +1016,11 @@ export default function PortalTest() {
         }
       }
     }
-    
+
     // Transform output blobs: remove url, keep accept, add prefix
     for (const fieldName of Object.keys(blobInfo.output || {})) {
       if (!schema.properties[fieldName]) continue;
-      
+
       const description = blobInfo.output[fieldName];
       schema.properties[fieldName] = {
         type: 'object',
