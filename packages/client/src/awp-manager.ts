@@ -291,7 +291,6 @@ export class AwpManager {
     prefixedName: string,
     args: Record<string, unknown>
   ): Promise<ToolCallResult<TOutput, TBlobs>> {
-    console.log(`[AwpManager] callTool: ${prefixedName}`, args);
     const { endpointId, toolName } = this.parsePrefixedName(prefixedName);
 
     const endpoint = this.endpoints.get(endpointId);
@@ -300,10 +299,8 @@ export class AwpManager {
       throw new Error(`Endpoint not found: ${endpointId}`);
     }
 
-    console.log(`[AwpManager] Calling ${toolName} on endpoint ${endpoint.url}`);
     try {
       const result = await endpoint.client.callTool<TOutput, TBlobs>(toolName, args);
-      console.log(`[AwpManager] Tool ${toolName} result:`, JSON.stringify(result, null, 2));
       return result;
     } catch (err) {
       console.error(`[AwpManager] Tool ${toolName} failed:`, err);

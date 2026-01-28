@@ -9,3 +9,4 @@ export {
 export { type UseAwpManagerResult, useAwpManager } from "./useAwpManager";
 export { type UseConversationsResult, useConversations } from "./useConversations";
 export { type UseLlmConfigResult, useLlmConfig } from "./useLlmConfig";
+export { type UseModelConfigResult, useModelConfig } from "./useModelConfig";

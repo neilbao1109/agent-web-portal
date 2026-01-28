@@ -75,52 +75,84 @@ export function ChatPanel({
   const isProcessing = state !== 'idle' && state !== 'error';
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      flex: 1,
+      minHeight: 0, // Critical for flex child to respect overflow
+      overflow: 'hidden',
+      bgcolor: 'grey.100', // Background for the sides
+    }}>
       {/* Messages */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 1, sm: 2 } }}>
-        {messages.length === 0 && !streamingMessage && (
-          <Box
-            sx={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              px: 2,
-            }}
-          >
-            <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
-              Start a conversation or load a skill to begin.
-            </Typography>
-          </Box>
-        )}
+      <Box sx={{ 
+        flex: 1, 
+        overflow: 'auto', 
+        minHeight: 0,
+        display: 'flex',
+        justifyContent: 'center',
+      }}>
+        <Box sx={{
+          width: '100%',
+          maxWidth: 900,
+          bgcolor: 'background.paper',
+          p: { xs: 1, sm: 2 },
+          boxShadow: { xs: 0, sm: 1 },
+        }}>
+          {messages.length === 0 && !streamingMessage && (
+            <Box
+              sx={{
+                height: '100%',
+                minHeight: 200,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                px: 2,
+              }}
+            >
+              <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
+                Start a conversation or load a skill to begin.
+              </Typography>
+            </Box>
+          )}
 
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} isMobile={isMobile} />
-        ))}
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} isMobile={isMobile} />
+          ))}
 
-        {/* Streaming message */}
-        {streamingMessage && (
-          <StreamingMessageBubble streamingMessage={streamingMessage} isMobile={isMobile} />
-        )}
+          {/* Streaming message */}
+          {streamingMessage && (
+            <StreamingMessageBubble streamingMessage={streamingMessage} isMobile={isMobile} />
+          )}
 
-        {/* Error */}
-        {error && (
-          <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
-            <Typography variant="body2">{error}</Typography>
-          </Paper>
-        )}
+          {/* Error */}
+          {error && (
+            <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
+              <Typography variant="body2">{error}</Typography>
+            </Paper>
+          )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </Box>
       </Box>
 
       {/* Input */}
-      <Paper 
-        sx={{ 
-          p: { xs: 1.5, sm: 2 }, 
-          borderTop: 1, 
-          borderColor: 'divider',
-          // Safe area for mobile devices with home indicator
-          pb: { xs: 'max(env(safe-area-inset-bottom), 12px)', sm: 2 },
+      <Box sx={{ 
+        bgcolor: 'grey.100',
+        display: 'flex',
+        justifyContent: 'center',
+        borderTop: 1, 
+        borderColor: 'divider',
+        flexShrink: 0,
+      }}>
+        <Paper 
+          sx={{ 
+            p: { xs: 1.5, sm: 2 }, 
+            width: '100%',
+            maxWidth: 900,
+            borderRadius: 0,
+            boxShadow: { xs: 0, sm: 1 },
+            // Safe area for mobile devices with home indicator
+            pb: { xs: 'max(env(safe-area-inset-bottom), 12px)', sm: 2 },
         }} 
         elevation={0}
       >
@@ -185,6 +217,7 @@ export function ChatPanel({
           )}
         </Box>
       </Paper>
+      </Box>
     </Box>
   );
 }

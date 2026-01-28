@@ -58,25 +58,15 @@ export function BlobMarkdown({
   components,
   className,
 }: BlobMarkdownProps) {
-  // Debug: log the raw markdown content
-  console.log("[BlobMarkdown] Raw markdown:", children);
-  console.log("[BlobMarkdown] Raw markdown:", children);
-  
   // Create custom components that handle blob URLs
   const blobComponents: Components = {
     // Override img to use BlobImage for blob:// URLs
     img: ({ src, alt, node, ...props }) => {
-      // Debug: log what we receive
-      console.log("[BlobMarkdown] img src:", src, "type:", typeof src, "alt:", alt);
-      console.log("[BlobMarkdown] img node:", node);
-      console.log("[BlobMarkdown] img props:", props);
-      
       // Handle case where src might be an object (e.g., { uri: "blob://..." })
       let resolvedSrc = src;
       if (typeof src === "object" && src !== null) {
         const srcObj = src as { uri?: string; url?: string };
         resolvedSrc = srcObj.uri || srcObj.url || "";
-        console.log("[BlobMarkdown] resolved object src to:", resolvedSrc);
       }
       
       if (resolvedSrc && typeof resolvedSrc === "string" && isBlobUri(resolvedSrc)) {

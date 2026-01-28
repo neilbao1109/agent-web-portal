@@ -27,27 +27,28 @@ import {
 } from '@mui/icons-material';
 import { theme } from './theme';
 import {
-  LlmConfigPanel,
   EndpointManager,
   SkillSidebar,
   ChatPanel,
   ConversationList,
+  ModelManager,
+  ModelSelector,
 } from './components';
-import { useLlmConfig, useAwpManager, useConversations, useAgent } from './hooks';
+import { useModelConfig, useAwpManager, useConversations, useAgent } from './hooks';
 import { StorageContextProvider } from './contexts/StorageContext';
 import type { Message } from './storage';
 
 const LEFT_DRAWER_WIDTH = 280;
-const RIGHT_DRAWER_WIDTH = 300;
+const RIGHT_DRAWER_WIDTH = 380;
 const MOBILE_DRAWER_WIDTH = '85vw';
 
-type RightTab = 'skills' | 'endpoints' | 'config';
+type RightTab = 'models' | 'skills' | 'endpoints';
 
 export function App() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  const [rightTab, setRightTab] = useState<RightTab>('config');
+  const [rightTab, setRightTab] = useState<RightTab>('models');
 
   // On desktop, open drawers by default
   useEffect(() => {
@@ -58,13 +59,27 @@ export function App() {
   }, [isMobile]);
 
   // Hooks
-  const { config, isConfigured, adapter, saveConfig } = useLlmConfig();
+  const {
+    endpoints: modelEndpoints,
+    models,
+    selectedModel,
+    adapter,
+    isConfigured,
+    addEndpoint: addModelEndpoint,
+    updateEndpoint: updateModelEndpoint,
+    deleteEndpoint: deleteModelEndpoint,
+    addModel,
+    updateModel,
+    deleteModel,
+    selectModel,
+  } = useModelConfig();
   const {
     manager,
     endpoints,
     skills,
     isLoading: endpointsLoading,
     registerEndpoint,
+    updateEndpoint,
     unregisterEndpoint,
     refresh,
   } = useAwpManager();
@@ -167,17 +182,23 @@ export function App() {
         variant="fullWidth"
         sx={{ flexShrink: 0 }}
       >
-        <Tab icon={<Settings />} label="Config" value="config" sx={{ minWidth: 0, px: 1 }} />
+        <Tab icon={<Settings />} label="Models" value="models" sx={{ minWidth: 0, px: 1 }} />
         <Tab icon={<Extension />} label="Skills" value="skills" sx={{ minWidth: 0, px: 1 }} />
         <Tab icon={<LinkIcon />} label="AWP" value="endpoints" sx={{ minWidth: 0, px: 1 }} />
       </Tabs>
       <Divider />
 
       <Box sx={{ flex: 1, overflow: 'auto' }}>
-        {rightTab === 'config' && (
-          <LlmConfigPanel
-            onSave={saveConfig}
-            currentConfig={config}
+        {rightTab === 'models' && (
+          <ModelManager
+            endpoints={modelEndpoints}
+            models={models}
+            onAddEndpoint={addModelEndpoint}
+            onUpdateEndpoint={updateModelEndpoint}
+            onDeleteEndpoint={deleteModelEndpoint}
+            onAddModel={addModel}
+            onUpdateModel={updateModel}
+            onDeleteModel={deleteModel}
           />
         )}
 
@@ -196,6 +217,7 @@ export function App() {
               endpoints={endpoints}
               isLoading={endpointsLoading}
               onRegister={registerEndpoint}
+              onUpdate={updateEndpoint}
               onUnregister={unregisterEndpoint}
               onRefresh={refresh}
             />
@@ -245,37 +267,24 @@ export function App() {
               AWP Agent
             </Typography>
 
-            {/* Status indicators - hide some on mobile */}
-            {!isConfigured && (
-              <Chip
-                label={isMobile ? "Configure" : "LLM not configured"}
-                color="warning"
-                size="small"
-                sx={{ mr: 1 }}
-                onClick={() => {
-                  setRightTab('config');
-                  setRightDrawerOpen(true);
-                }}
-              />
-            )}
-            {isConfigured && config && !isMobile && (
-              <Chip
-                label={config.model}
-                size="small"
-                variant="outlined"
-                sx={{ mr: 1, cursor: 'pointer' }}
-                onClick={() => {
-                  setRightTab('config');
-                  setRightDrawerOpen(true);
-                }}
-              />
-            )}
+            {/* Model selector */}
+            <ModelSelector
+              models={models}
+              selectedModel={selectedModel}
+              onSelectModel={selectModel}
+              onOpenSettings={() => {
+                setRightTab('models');
+                setRightDrawerOpen(true);
+              }}
+              size="small"
+            />
+
             {endpoints.length > 0 && !isMobile && (
               <Chip
                 label={`${endpoints.length} AWP`}
                 size="small"
                 variant="outlined"
-                sx={{ mr: 1, cursor: 'pointer' }}
+                sx={{ ml: 1, cursor: 'pointer' }}
                 onClick={() => {
                   setRightTab('endpoints');
                   setRightDrawerOpen(true);
@@ -311,12 +320,14 @@ export function App() {
           </SwipeableDrawer>
         ) : (
           <Drawer
-            variant="persistent"
+            variant="temporary"
             anchor="left"
             open={leftDrawerOpen}
+            onClose={() => setLeftDrawerOpen(false)}
+            ModalProps={{
+              keepMounted: true, // Better open performance on desktop
+            }}
             sx={{
-              width: leftDrawerOpen ? LEFT_DRAWER_WIDTH : 0,
-              flexShrink: 0,
               '& .MuiDrawer-paper': {
                 width: LEFT_DRAWER_WIDTH,
                 boxSizing: 'border-box',
@@ -335,9 +346,7 @@ export function App() {
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            // On mobile, no margin adjustment needed since drawers overlay
-            ml: isMobile ? 0 : (leftDrawerOpen ? 0 : `-${LEFT_DRAWER_WIDTH}px`),
-            mr: isMobile ? 0 : (rightDrawerOpen ? 0 : `-${RIGHT_DRAWER_WIDTH}px`),
+            minWidth: 0, // Prevent flex item from overflowing
             transition: (theme) =>
               theme.transitions.create(['margin'], {
                 easing: theme.transitions.easing.sharp,
@@ -361,58 +370,26 @@ export function App() {
             >
               <Settings sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-                Configure LLM
+                Configure a Model
               </Typography>
               <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center', px: 2 }}>
-                Set up your LLM API connection to start using the agent.
+                Add an endpoint and model to start using the agent.
               </Typography>
               <Button
                 variant="contained"
                 size="large"
                 onClick={() => {
-                  setRightTab('config');
+                  setRightTab('models');
                   setRightDrawerOpen(true);
                 }}
               >
-                Configure LLM
-              </Button>
-            </Box>
-          )}
-
-          {/* No endpoints state */}
-          {isConfigured && endpoints.length === 0 && (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                p: { xs: 2, sm: 4 },
-              }}
-            >
-              <LinkIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-                Add an AWP Endpoint
-              </Typography>
-              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center', px: 2 }}>
-                Connect to an AWP server to access skills and tools.
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                onClick={() => {
-                  setRightDrawerOpen(true);
-                  setRightTab('endpoints');
-                }}
-              >
-                Add Endpoint
+                Add Model
               </Button>
             </Box>
           )}
 
           {/* Chat state */}
-          {isConfigured && endpoints.length > 0 && (
+          {isConfigured && (
             <ChatPanel
               messages={messages}
               streamingMessage={streamingMessage}
@@ -443,12 +420,14 @@ export function App() {
           </SwipeableDrawer>
         ) : (
           <Drawer
-            variant="persistent"
+            variant="temporary"
             anchor="right"
             open={rightDrawerOpen}
+            onClose={() => setRightDrawerOpen(false)}
+            ModalProps={{
+              keepMounted: true,
+            }}
             sx={{
-              width: rightDrawerOpen ? RIGHT_DRAWER_WIDTH : 0,
-              flexShrink: 0,
               '& .MuiDrawer-paper': {
                 width: RIGHT_DRAWER_WIDTH,
                 boxSizing: 'border-box',

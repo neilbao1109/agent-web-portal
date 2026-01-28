@@ -54,6 +54,8 @@ export interface UseAgentOptions {
   systemPrompt?: string;
   /** Max tool call iterations */
   maxIterations?: number;
+  /** Callback when a message is added to the conversation */
+  onMessageAdded?: (message: Message) => void;
 }
 
 export interface UseAgentResult {
@@ -75,6 +77,8 @@ export interface UseAgentResult {
   unloadSkill: (skillId: string) => void;
   /** Clear conversation */
   clearConversation: () => void;
+  /** Load messages from a saved conversation */
+  loadMessages: (msgs: Message[]) => void;
   /** Stop current generation */
   stop: () => void;
   /** Error message if in error state */
@@ -119,7 +123,13 @@ The system will automatically resolve the blob URI and display the image inline 
 Always be helpful, accurate, and efficient in using the available tools.`;
 
 export function useAgent(options: UseAgentOptions): UseAgentResult {
-  const { manager, adapter, systemPrompt = DEFAULT_SYSTEM_PROMPT, maxIterations = 10 } = options;
+  const {
+    manager,
+    adapter,
+    systemPrompt = DEFAULT_SYSTEM_PROMPT,
+    maxIterations = 10,
+    onMessageAdded,
+  } = options;
 
   const [state, setState] = useState<AgentState>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -166,6 +176,10 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
     setError(null);
   }, []);
 
+  const loadMessages = useCallback((msgs: Message[]) => {
+    setMessages(msgs);
+  }, []);
+
   const loadSkill = useCallback(
     async (skillId: string) => {
       const context = contextRef.current;
@@ -207,6 +221,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, userMessage]);
+      onMessageAdded?.(userMessage);
       context.addMessage({ role: "user", content });
 
       abortControllerRef.current = new AbortController();
@@ -334,6 +349,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
             createdAt: Date.now(),
           };
           setMessages((prev) => [...prev, assistantMessage]);
+          onMessageAdded?.(assistantMessage);
           context.addMessage({
             role: "assistant",
             content: fullContent,
@@ -427,6 +443,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
               createdAt: Date.now(),
             };
             setMessages((prev) => [...prev, toolResultMessage]);
+            onMessageAdded?.(toolResultMessage);
             context.addMessage({
               role: "tool",
               content: result,
@@ -454,7 +471,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
         }
       }
     },
-    [adapter, manager, systemPrompt, maxIterations]
+    [adapter, manager, systemPrompt, maxIterations, onMessageAdded]
   );
 
   return {
@@ -467,6 +484,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
     loadSkill,
     unloadSkill,
     clearConversation,
+    loadMessages,
     stop,
     error,
   };

@@ -110,6 +110,7 @@ export function BlobImage({ src, alt, storage, style, className }: BlobImageProp
   if (loading) {
     return (
       <Box
+        component="span"
         sx={{
           display: "inline-flex",
           alignItems: "center",
@@ -128,6 +129,7 @@ export function BlobImage({ src, alt, storage, style, className }: BlobImageProp
   if (error || !resolvedUrl) {
     return (
       <Box
+        component="span"
         sx={{
           display: "inline-flex",
           flexDirection: "column",
@@ -141,7 +143,7 @@ export function BlobImage({ src, alt, storage, style, className }: BlobImageProp
         }}
       >
         <BrokenImage color="disabled" />
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+        <Typography component="span" variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
           {error || "Image not available"}
         </Typography>
       </Box>

@@ -169,7 +169,6 @@ export class AwpClient {
       method,
       params,
     });
-    console.log(`[AwpClient] Sending request to ${this.endpoint}:`, { method, params });
 
     // Get auth headers if auth is configured
     let authHeaders: Record<string, string> = {};
@@ -190,7 +189,6 @@ export class AwpClient {
     };
 
     let response = await doRequest();
-    console.log(`[AwpClient] Response status: ${response.status} ${response.statusText}`);
 
     // Handle 401 with auth flow
     if (response.status === 401 && this.auth) {
@@ -233,7 +231,6 @@ export class AwpClient {
       throw new Error(`RPC error: ${result.error.message}`);
     }
 
-    console.log(`[AwpClient] Response result:`, JSON.stringify(result.result, null, 2));
     return result.result;
   }
 

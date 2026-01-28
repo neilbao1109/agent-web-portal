@@ -141,9 +141,6 @@ export class BlobInterceptor {
       const { uri, presignedUrl } = await this.storage.generatePresignedPutUrl(storagePrefix, {
         contentType: acceptType,
       });
-      console.log(
-        `[BlobInterceptor] Output blob field '${field}': generated uri=${uri}, presignedUrl=${presignedUrl}`
-      );
       outputPresigned[field] = presignedUrl;
       outputUri[field] = uri;
       outputAcceptTypes[field] = acceptType;
@@ -187,20 +184,11 @@ export class BlobInterceptor {
     blobContext: ExtendedBlobContext,
     blobSchema: ToolBlobSchema
   ): Record<string, unknown> {
-    console.log("[BlobInterceptor] transformToolResultToLlmResult input:", {
-      toolResult,
-      blobContext,
-      blobSchema,
-    });
     const llmResult = { ...toolResult };
 
     for (const field of blobSchema.outputBlobs) {
       const toolValue = toolResult[field] as ToolBlobOutputResultValue | undefined;
       const uri = blobContext.outputUri[field];
-      console.log(
-        `[BlobInterceptor] Output blob field '${field}': uri=${uri}, toolValue=`,
-        toolValue
-      );
 
       if (uri) {
         // Build LLM-facing output blob result
@@ -209,11 +197,9 @@ export class BlobInterceptor {
           llmValue.contentType = toolValue.contentType;
         }
         llmResult[field] = llmValue;
-        console.log(`[BlobInterceptor] Set llmResult['${field}'] =`, llmValue);
       }
     }
 
-    console.log("[BlobInterceptor] transformToolResultToLlmResult output:", llmResult);
     return llmResult;
   }
 

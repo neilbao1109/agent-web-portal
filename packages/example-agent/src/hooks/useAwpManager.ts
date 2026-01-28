@@ -54,6 +54,8 @@ export interface UseAwpManagerResult {
   isLoading: boolean;
   /** Register a new endpoint */
   registerEndpoint: (url: string, alias?: string) => Promise<RegisteredEndpoint>;
+  /** Update an existing endpoint */
+  updateEndpoint: (endpointId: string, url: string, alias?: string) => Promise<RegisteredEndpoint>;
   /** Unregister an endpoint */
   unregisterEndpoint: (endpointId: string) => void;
   /** Refresh skills and tools */
@@ -65,7 +67,6 @@ export interface UseAwpManagerResult {
 export function useAwpManager(): UseAwpManagerResult {
   const manager = useMemo(() => {
     const apiBaseUrl = getApiBaseUrl();
-    console.log(`[useAwpManager] Using API base URL: ${apiBaseUrl}`);
 
     return new AwpManager({
       clientName: "AWP Agent",
@@ -151,6 +152,20 @@ export function useAwpManager(): UseAwpManagerResult {
     [manager, saveEndpoints]
   );
 
+  const updateEndpoint = useCallback(
+    async (endpointId: string, url: string, alias?: string): Promise<RegisteredEndpoint> => {
+      // Unregister old endpoint first
+      manager.unregisterEndpoint(endpointId);
+      // Register with new settings
+      const registered = await manager.registerEndpoint(url, alias);
+      const newEndpoints = manager.getEndpoints();
+      setEndpoints(newEndpoints);
+      saveEndpoints(newEndpoints);
+      return registered;
+    },
+    [manager, saveEndpoints]
+  );
+
   const unregisterEndpoint = useCallback(
     (endpointId: string) => {
       manager.unregisterEndpoint(endpointId);
@@ -177,6 +192,7 @@ export function useAwpManager(): UseAwpManagerResult {
     tools,
     isLoading,
     registerEndpoint,
+    updateEndpoint,
     unregisterEndpoint,
     refresh,
     updateAuthStatus,

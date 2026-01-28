@@ -13,7 +13,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   Chip,
   Dialog,
@@ -25,13 +24,14 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { Add, Delete, Refresh, Link as LinkIcon } from '@mui/icons-material';
+import { Add, Delete, Refresh, Link as LinkIcon, Edit } from '@mui/icons-material';
 import type { RegisteredEndpoint } from '../core';
 
 export interface EndpointManagerProps {
   endpoints: RegisteredEndpoint[];
   isLoading: boolean;
   onRegister: (url: string, alias?: string) => Promise<unknown>;
+  onUpdate: (endpointId: string, url: string, alias?: string) => Promise<unknown>;
   onUnregister: (endpointId: string) => void;
   onRefresh: () => Promise<void>;
 }
@@ -40,18 +40,45 @@ export function EndpointManager({
   endpoints,
   isLoading,
   onRegister,
+  onUpdate,
   onUnregister,
   onRefresh,
 }: EndpointManagerProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEndpoint, setEditingEndpoint] = useState<RegisteredEndpoint | null>(null);
   const [url, setUrl] = useState('');
   const [alias, setAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [registering, setRegistering] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleRegister = async () => {
+  const resetForm = () => {
+    setUrl('');
+    setAlias('');
+    setEditingEndpoint(null);
+    setError(null);
+  };
+
+  const handleOpenAdd = () => {
+    resetForm();
+    setDialogOpen(true);
+  };
+
+  const handleOpenEdit = (endpoint: RegisteredEndpoint) => {
+    setEditingEndpoint(endpoint);
+    setUrl(endpoint.url);
+    setAlias(endpoint.alias || '');
+    setError(null);
+    setDialogOpen(true);
+  };
+
+  const handleClose = () => {
+    setDialogOpen(false);
+    resetForm();
+  };
+
+  const handleSave = async () => {
     if (!url.trim()) {
       setError('URL is required');
       return;
@@ -65,17 +92,19 @@ export function EndpointManager({
     }
 
     setError(null);
-    setRegistering(true);
+    setSaving(true);
 
     try {
-      await onRegister(url.trim(), alias.trim() || undefined);
-      setDialogOpen(false);
-      setUrl('');
-      setAlias('');
+      if (editingEndpoint) {
+        await onUpdate(editingEndpoint.endpointId, url.trim(), alias.trim() || undefined);
+      } else {
+        await onRegister(url.trim(), alias.trim() || undefined);
+      }
+      handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register endpoint');
+      setError(err instanceof Error ? err.message : 'Failed to save endpoint');
     } finally {
-      setRegistering(false);
+      setSaving(false);
     }
   };
 
@@ -93,7 +122,7 @@ export function EndpointManager({
             startIcon={<Add />}
             variant="outlined"
             size="small"
-            onClick={() => setDialogOpen(true)}
+            onClick={handleOpenAdd}
           >
             Add
           </Button>
@@ -117,10 +146,11 @@ export function EndpointManager({
                 borderColor: 'divider',
                 borderRadius: 1,
                 mb: 1,
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: isMobile ? 'flex-start' : 'center',
-                pr: isMobile ? 1 : 6,
-                position: 'relative',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 1,
+                py: 1,
+                px: 1.5,
               }}
             >
               <ListItemText
@@ -130,19 +160,10 @@ export function EndpointManager({
                     alignItems: 'center', 
                     gap: 0.5, 
                     flexWrap: 'wrap',
-                    pr: isMobile ? 4 : 0,
                   }}>
-                    <Typography variant="body2" fontWeight="medium" noWrap sx={{ maxWidth: '100%' }}>
+                    <Typography variant="body2" fontWeight="medium" noWrap>
                       {endpoint.alias || endpoint.endpointId}
                     </Typography>
-                    {!isMobile && (
-                      <Chip
-                        label={endpoint.endpointId}
-                        size="small"
-                        variant="outlined"
-                        sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}
-                      />
-                    )}
                     <Chip
                       label={endpoint.isAuthenticated ? 'Auth' : 'No Auth'}
                       size="small"
@@ -155,43 +176,54 @@ export function EndpointManager({
                   <Typography
                     variant="body2"
                     color="text.secondary"
+                    noWrap
                     sx={{ 
                       fontFamily: 'monospace', 
                       fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                      wordBreak: 'break-all',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}
+                    title={endpoint.url}
                   >
                     {endpoint.url}
                   </Typography>
                 }
-                sx={{ my: 0 }}
+                sx={{ my: 0, minWidth: 0, flex: 1 }}
               />
-              <IconButton
-                onClick={() => onUnregister(endpoint.endpointId)}
-                title="Remove endpoint"
-                size="small"
-                sx={{
-                  position: isMobile ? 'absolute' : 'static',
-                  top: isMobile ? 8 : 'auto',
-                  right: isMobile ? 8 : 'auto',
-                }}
-              >
-                <Delete fontSize="small" />
-              </IconButton>
+              <Box sx={{
+                display: 'flex',
+                gap: 0.5,
+                flexShrink: 0,
+              }}>
+                <IconButton
+                  onClick={() => handleOpenEdit(endpoint)}
+                  title="Edit endpoint"
+                  size="small"
+                >
+                  <Edit fontSize="small" />
+                </IconButton>
+                <IconButton
+                  onClick={() => onUnregister(endpoint.endpointId)}
+                  title="Remove endpoint"
+                  size="small"
+                >
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Box>
             </ListItem>
           ))}
         </List>
       )}
 
-      {/* Add Endpoint Dialog */}
+      {/* Add/Edit Endpoint Dialog */}
       <Dialog 
         open={dialogOpen} 
-        onClose={() => setDialogOpen(false)} 
+        onClose={handleClose} 
         maxWidth="sm" 
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Add AWP Endpoint</DialogTitle>
+        <DialogTitle>{editingEndpoint ? 'Edit AWP Endpoint' : 'Add AWP Endpoint'}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
@@ -226,9 +258,9 @@ export function EndpointManager({
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleRegister} variant="contained" disabled={registering}>
-            {registering ? 'Adding...' : 'Add'}
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleSave} variant="contained" disabled={saving}>
+            {saving ? 'Saving...' : (editingEndpoint ? 'Save' : 'Add')}
           </Button>
         </DialogActions>
       </Dialog>
