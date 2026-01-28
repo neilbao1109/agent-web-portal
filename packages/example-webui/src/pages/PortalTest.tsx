@@ -1440,10 +1440,10 @@ export default function PortalTest() {
                           )}
                         </Box>
                       </Box>
-                      {tool._awp?.blob && (
+                      {tool._awp && (
                         <Box>
                           <Typography variant="subtitle2" gutterBottom>
-                            Blob Fields (AWP Extension)
+                            AWP Extension (_awp)
                           </Typography>
                           <Box
                             component="pre"
@@ -1455,7 +1455,7 @@ export default function PortalTest() {
                               fontSize: 12,
                             }}
                           >
-                            {JSON.stringify(tool._awp.blob, null, 2)}
+                            {JSON.stringify(tool._awp, null, 2)}
                           </Box>
                         </Box>
                       )}
