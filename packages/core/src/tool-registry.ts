@@ -1,5 +1,9 @@
 import type { ZodSchema } from "zod";
-import { extractBlobFields } from "./blob.ts";
+import {
+  type BlobDescriptorMap,
+  extractBlobFields,
+  extractCombinedBlobDescriptors,
+} from "./blob.ts";
 import type { ToolHandlerContext } from "./define-tool.ts";
 import type {
   AgentWebPortalConfig,
@@ -21,6 +25,8 @@ interface ToolDefinitionWithBlobs extends ToolDefinition {
   inputBlobs: string[];
   /** Blob field names in output schema */
   outputBlobs: string[];
+  /** Combined blob descriptors for _awp.blob extension */
+  blobDescriptors: BlobDescriptorMap;
 }
 
 /**
@@ -86,6 +92,12 @@ export class ToolRegistry {
     const inputBlobs = extractBlobFields(options.inputSchema);
     const outputBlobs = extractBlobFields(options.outputSchema);
 
+    // Extract combined blob descriptors for _awp.blob extension
+    const blobDescriptors = extractCombinedBlobDescriptors(
+      options.inputSchema,
+      options.outputSchema
+    );
+
     this.tools.set(name, {
       inputSchema: options.inputSchema,
       outputSchema: options.outputSchema,
@@ -93,6 +105,7 @@ export class ToolRegistry {
       description: options.description,
       inputBlobs,
       outputBlobs,
+      blobDescriptors,
     });
   }
 
@@ -240,12 +253,17 @@ export class ToolRegistry {
 
   /**
    * Convert a tool to MCP schema format
-   * 
+   *
+   * For tools with output blobs, the output blob fields are added to the inputSchema
    * For tools with output blobs, the output blob fields are added to the inputSchema
    * so that generic MCP clients can see they need to provide presigned writable URLs.
-   * AWP-aware Agent runtimes will use _awp.blob.output to strip these fields from
-   * the schema before presenting to the LLM.
-   * 
+   * AWP-aware Agent runtimes will use _awp.blob to understand blob field types and
+   * perform the necessary URI/URL translations.
+   *
+   * Tool-facing schema format:
+   * - Input blob params: { url: string, contentType?: string }
+   * - Output blob params: { url: string, accept?: string }
+   *
    * @param name - Tool name
    */
   toMcpSchema(name: string): McpToolSchema | null {
@@ -261,40 +279,61 @@ export class ToolRegistry {
       required?: string[];
     };
 
-    // For output blobs, we need to add them to the inputSchema as parameters
-    // that require presigned writable URLs. This makes the tool compatible with
-    // generic MCP clients that don't understand AWP blob extensions.
-    if (tool.outputBlobs.length > 0) {
-      const outputBlobSchema = zodToJsonSchema(tool.outputSchema) as {
-        type?: string;
-        properties?: Record<string, unknown>;
-        required?: string[];
-      };
+    // Ensure properties object exists
+    if (!inputSchema.properties) {
+      inputSchema.properties = {};
+    }
 
-      // Ensure properties object exists
-      if (!inputSchema.properties) {
-        inputSchema.properties = {};
-      }
-
-      // Add output blob fields to inputSchema with description indicating they need writable URLs
-      for (const blobField of tool.outputBlobs) {
-        if (outputBlobSchema.properties?.[blobField]) {
-          inputSchema.properties[blobField] = {
+    // Transform input blob fields to the tool-facing format: { url: string, contentType?: string }
+    for (const blobField of tool.inputBlobs) {
+      const descriptor = tool.blobDescriptors[blobField];
+      inputSchema.properties[blobField] = {
+        type: "object",
+        description: descriptor?.description ?? `Input blob: ${blobField}`,
+        properties: {
+          url: {
             type: "string",
             format: "uri",
-            description: `Presigned writable URL for output blob: ${blobField}`,
-          };
-        }
-      }
+            description: "Presigned readonly URL for reading the blob",
+          },
+          contentType: {
+            type: "string",
+            description: "MIME type of the blob content (similar to HTTP Content-Type header)",
+          },
+        },
+        required: ["url"],
+      };
+    }
 
-      // Add output blob fields to required array
-      if (!inputSchema.required) {
-        inputSchema.required = [];
-      }
-      for (const blobField of tool.outputBlobs) {
-        if (!inputSchema.required.includes(blobField)) {
-          inputSchema.required.push(blobField);
-        }
+    // For output blobs, add them to inputSchema as parameters
+    // Tool-facing format: { url: string, accept?: string }
+    for (const blobField of tool.outputBlobs) {
+      const descriptor = tool.blobDescriptors[blobField];
+      inputSchema.properties[blobField] = {
+        type: "object",
+        description: descriptor?.description ?? `Output blob: ${blobField}`,
+        properties: {
+          url: {
+            type: "string",
+            format: "uri",
+            description: "Presigned read-write URL for writing the blob",
+          },
+          accept: {
+            type: "string",
+            description: "Accepted MIME types for the output (similar to HTTP Accept header)",
+          },
+        },
+        required: ["url"],
+      };
+    }
+
+    // Ensure all blob fields are in the required array
+    if (!inputSchema.required) {
+      inputSchema.required = [];
+    }
+    for (const blobField of [...tool.inputBlobs, ...tool.outputBlobs]) {
+      if (!inputSchema.required.includes(blobField)) {
+        inputSchema.required.push(blobField);
       }
     }
 
@@ -305,20 +344,12 @@ export class ToolRegistry {
       inputSchema,
     };
 
-    // Add simplified _awp.blob extension if there are any blobs
-    // This is just a list of field names for AWP-aware runtimes
-    const hasBlobs = tool.inputBlobs.length > 0 || tool.outputBlobs.length > 0;
+    // Add _awp.blob extension with the new format: Record<string, { type, description }>
+    const hasBlobs = Object.keys(tool.blobDescriptors).length > 0;
     if (hasBlobs) {
-      const awp: McpToolAwpExtension = { blob: {} };
-
-      if (tool.inputBlobs.length > 0) {
-        awp.blob!.input = [...tool.inputBlobs];
-      }
-
-      if (tool.outputBlobs.length > 0) {
-        awp.blob!.output = [...tool.outputBlobs];
-      }
-
+      const awp: McpToolAwpExtension = {
+        blob: { ...tool.blobDescriptors },
+      };
       schema._awp = awp;
     }
 

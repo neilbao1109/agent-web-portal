@@ -66,6 +66,7 @@ export {
 export {
   BlobInterceptor,
   type BlobInterceptorOptions,
+  type ExtendedBlobContext,
   type ToolBlobSchema,
 } from "./blob-interceptor.ts";
 // Client exports
@@ -77,4 +78,4 @@ export {
 } from "./client.ts";
 export { S3StorageProvider, type S3StorageProviderOptions } from "./storage/s3.ts";
 // Storage provider exports
-export type { PresignedUrlPair, StorageProvider } from "./storage/types.ts";
+export type { PresignedUrlOptions, PresignedUrlPair, StorageProvider } from "./storage/types.ts";

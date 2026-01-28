@@ -151,22 +151,42 @@ export interface JsonRpcErrorResponse {
 export type JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse;
 
 /**
+ * Blob field descriptor for the AWP extension
+ * Describes whether a field is an input or output blob and its purpose
+ */
+export interface BlobFieldDescriptor {
+  /** Whether this is an input blob (read) or output blob (write) */
+  kind: "input" | "output";
+  /** Human-readable description of the blob field */
+  description: string;
+}
+
+/**
  * AWP extension data for a tool
  * Kept separate from inputSchema to avoid polluting JSON Schema
- * 
- * Note: The inputSchema in tools/list includes ALL parameters (including output blob fields)
- * so that generic MCP clients can see they need to provide presigned writable URLs.
- * AWP-aware Agent runtimes will use the _awp.blob.output list to strip those fields
- * from the schema before presenting to the LLM.
+ *
+ * For Tools (MCP client compatible):
+ * - Input blob params have schema: { url: string, contentType?: string }
+ * - Output blob params have schema: { url: string, accept?: string }
+ * - Output response includes: { contentType?: string } for each output blob
+ *
+ * For LLM (AWP-aware Agent runtimes):
+ * - Input blob params have schema: { uri: string, contentType?: string }
+ * - Output blob params have schema: { accept?: string }
+ * - Output response includes: { uri: string, contentType?: string } for each output blob
+ *
+ * AWP Client performs bidirectional translation:
+ * 1. Schema decoration: remove url from blob props, describe uri for input blobs
+ * 2. Input translation: generate presigned readonly URL from URI
+ * 3. Output translation: generate output URI and writable presigned URL
+ * 4. Response injection: inject output URI into response
  */
 export interface McpToolAwpExtension {
-  /** Simple blob field lists - just the parameter names */
-  blob?: {
-    /** Input blob parameter names (require presigned readable URLs) */
-    input?: string[];
-    /** Output blob parameter names (require presigned writable URLs, stripped from LLM schema) */
-    output?: string[];
-  };
+  /**
+   * Blob field descriptors - maps property names to their blob metadata
+   * Key is the property name in the schema
+   */
+  blob?: Record<string, BlobFieldDescriptor>;
 }
 
 /**
@@ -323,6 +343,76 @@ export interface BlobContext {
 export interface McpToolsCallParamsWithBlob extends McpToolsCallParams {
   /** Blob context with presigned URLs (provided by Client SDK) */
   _blobContext?: BlobContext;
+}
+
+// ============================================================================
+// Tool-facing Blob Value Types (for MCP client compatibility)
+// ============================================================================
+
+/**
+ * Tool-facing input blob value
+ * What the Tool receives for input blobs from the caller
+ */
+export interface ToolBlobInputValue {
+  /** Presigned readonly URL for reading the blob */
+  url: string;
+  /** MIME type of the blob content (similar to HTTP Content-Type header) */
+  contentType?: string;
+}
+
+/**
+ * Tool-facing output blob input value
+ * What the Tool receives for output blob parameters from the caller
+ */
+export interface ToolBlobOutputInputValue {
+  /** Presigned read-write URL for writing the blob */
+  url: string;
+  /** Accepted MIME types for the output (similar to HTTP Accept header) */
+  accept?: string;
+}
+
+/**
+ * Tool-facing output blob result value
+ * What the Tool returns for output blobs
+ */
+export interface ToolBlobOutputResultValue {
+  /** MIME type of the written blob content */
+  contentType?: string;
+}
+
+// ============================================================================
+// LLM-facing Blob Value Types (for AWP-aware Agent runtimes)
+// ============================================================================
+
+/**
+ * LLM-facing input blob value
+ * What the LLM provides for input blobs
+ */
+export interface LlmBlobInputValue {
+  /** Resource identifier (e.g., s3://bucket/key) */
+  uri: string;
+  /** MIME type of the blob content */
+  contentType?: string;
+}
+
+/**
+ * LLM-facing output blob input value
+ * What the LLM provides for output blob parameters
+ */
+export interface LlmBlobOutputInputValue {
+  /** Accepted MIME types for the output */
+  accept?: string;
+}
+
+/**
+ * LLM-facing output blob result value
+ * What the LLM receives for output blobs in the response
+ */
+export interface LlmBlobOutputResultValue {
+  /** Resource identifier of the written blob (e.g., s3://bucket/key) */
+  uri: string;
+  /** MIME type of the written blob content */
+  contentType?: string;
 }
 
 /**

@@ -11,7 +11,7 @@
  * Temporary upload URLs have a 5 minute TTL.
  */
 
-import { blob, createAgentWebPortal } from "@agent-web-portal/core";
+import { inputBlob, outputBlob, createAgentWebPortal } from "@agent-web-portal/core";
 import { z } from "zod";
 import {
   getStoredImageS3,
@@ -313,7 +313,7 @@ export function readOutputBlob(id: string): { data: ArrayBuffer; contentType: st
 // =============================================================================
 
 const PutImageInputSchema = z.object({
-  image: blob({
+  image: inputBlob({
     mimeType: "image/*",
     description: "Image file to upload (passed as presigned GET URL)",
   }),
@@ -334,8 +334,8 @@ const GetImageInputSchema = z.object({
 });
 
 const GetImageOutputSchema = z.object({
-  image: blob({
-    mimeType: "image/*",
+  image: outputBlob({
+    accept: "image/*",
     description: "The retrieved image file (written to presigned PUT URL)",
   }),
   contentType: z.string().describe("MIME type of the image"),

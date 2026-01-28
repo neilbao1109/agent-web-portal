@@ -3,16 +3,36 @@
  *
  * A client for interacting with Agent Web Portal servers,
  * with automatic blob handling through presigned URLs.
+ *
+ * This client performs bidirectional translation between:
+ * - LLM-facing format (what the LLM provides/receives)
+ * - Tool-facing format (what the Tool receives/returns)
+ *
+ * LLM-facing (what LLM provides):
+ * - Input blob: { uri: "s3://...", contentType?: "image/png" }
+ * - Output blob: { accept?: "image/png" }
+ *
+ * Tool-facing (what Tool receives):
+ * - Input blob: { url: "https://presigned...", contentType?: "image/png" }
+ * - Output blob: { url: "https://presigned-put...", accept?: "image/png" }
+ *
+ * LLM-facing (what LLM receives in response):
+ * - Output blob: { uri: "s3://...", contentType?: "image/png" }
  */
 
 import type {
-  BlobContext,
+  BlobFieldDescriptor,
+  LlmBlobOutputResultValue,
   McpToolAwpExtension,
   McpToolSchema,
   McpToolsListResponse,
 } from "@agent-web-portal/core";
 import type { AuthChallengeResponse, AwpAuth } from "./auth/index.ts";
-import { BlobInterceptor, type ToolBlobSchema } from "./blob-interceptor.ts";
+import {
+  BlobInterceptor,
+  type ExtendedBlobContext,
+  type ToolBlobSchema,
+} from "./blob-interceptor.ts";
 import type { StorageProvider } from "./storage/types.ts";
 
 /**
@@ -35,19 +55,22 @@ export interface AwpClientOptions {
 
 /**
  * Tool call result with separated output and blobs
- * 
+ *
  * For tools with output blobs:
  * - `output` contains the non-blob output fields
- * - `blobs` contains the blob field values (permanent URIs like s3://...)
- * 
+ * - `blobs` contains the blob field values in LLM-facing format: { uri, contentType? }
+ *
  * For tools without output blobs:
  * - `output` contains all output fields
  * - `blobs` is an empty object
  */
-export interface ToolCallResult<TOutput = unknown, TBlobs = Record<string, string>> {
+export interface ToolCallResult<
+  TOutput = unknown,
+  TBlobs = Record<string, LlmBlobOutputResultValue>,
+> {
   /** The non-blob output data */
   output: TOutput;
-  /** The blob output URIs (permanent storage URIs) */
+  /** The blob output values (LLM-facing format: { uri, contentType? }) */
   blobs: TBlobs;
   /** Whether the call resulted in an error */
   isError?: boolean;
@@ -212,7 +235,7 @@ export class AwpClient {
   }
 
   /**
-   * Extract blob fields from the _awp extension
+   * Extract blob fields from the _awp extension (new format)
    * @param awp - The _awp extension object from the tool schema
    * @param type - "input" or "output"
    */
@@ -220,11 +243,28 @@ export class AwpClient {
     awp: McpToolAwpExtension | undefined,
     type: "input" | "output"
   ): string[] {
-    // New simplified format: _awp.blob.input/output are string arrays
-    if (!awp?.blob?.[type]) {
+    if (!awp?.blob) {
       return [];
     }
-    return [...awp.blob[type]!];
+
+    // New format: _awp.blob is Record<string, { kind: 'input' | 'output', description: string }>
+    const fields: string[] = [];
+    for (const [fieldName, descriptor] of Object.entries(awp.blob)) {
+      if (descriptor.kind === type) {
+        fields.push(fieldName);
+      }
+    }
+    return fields;
+  }
+
+  /**
+   * Extract blob descriptors from the _awp extension
+   * @param awp - The _awp extension object from the tool schema
+   */
+  private extractBlobDescriptorsFromAwp(
+    awp: McpToolAwpExtension | undefined
+  ): Record<string, BlobFieldDescriptor> {
+    return awp?.blob ?? {};
   }
 
   /**
@@ -238,15 +278,17 @@ export class AwpClient {
     const response = (await this.sendRequest("tools/list")) as McpToolsListResponse;
 
     for (const tool of response.tools) {
-      // Extract blob fields from the _awp.blob extension (simple string arrays)
+      // Extract blob fields from the _awp.blob extension (new format)
       const inputBlobs = this.extractBlobFieldsFromAwp(tool._awp, "input");
       const outputBlobs = this.extractBlobFieldsFromAwp(tool._awp, "output");
+      const blobDescriptors = this.extractBlobDescriptorsFromAwp(tool._awp);
 
       this.toolSchemaCache.set(tool.name, {
         schema: tool,
         blobSchema: {
           inputBlobs,
           outputBlobs,
+          blobDescriptors,
         },
       });
     }
@@ -281,22 +323,23 @@ export class AwpClient {
   /**
    * Call a tool with automatic blob handling
    *
-   * The caller provides:
-   * - args: Tool arguments (without output blob fields, those are handled automatically)
-   *   - Input blob fields should contain permanent URIs (e.g., s3://bucket/key)
+   * The caller provides LLM-facing args:
+   * - Input blob fields: { uri: "s3://...", contentType?: "image/png" }
+   * - Output blob fields: { accept?: "image/png" } (optional, for preferred output type)
+   * - Other fields: as normal
    *
    * The client:
-   * - Generates presigned GET URLs for input blobs
-   * - Generates presigned PUT URLs for output blobs
-   * - Sends the request with the full arguments including output blob presigned URLs
-   * - Returns the result split into { output, blobs }
+   * 1. Transforms LLM args to Tool args (generates presigned URLs)
+   * 2. Sends the request with Tool-facing arguments
+   * 3. Transforms Tool result to LLM result (injects URIs)
+   * 4. Returns the result split into { output, blobs }
    *
    * @param name - Tool name
-   * @param args - Tool arguments (input blob fields contain s3:// URIs)
+   * @param args - LLM-facing tool arguments
    * @param blobSchema - Optional blob schema override
    * @returns The tool result with output and blobs separated
    */
-  async callTool<TOutput = unknown, TBlobs = Record<string, string>>(
+  async callTool<TOutput = unknown, TBlobs = Record<string, LlmBlobOutputResultValue>>(
     name: string,
     args: Record<string, unknown>,
     blobSchema?: ToolBlobSchema
@@ -306,31 +349,27 @@ export class AwpClient {
     // Get blob schema
     const effectiveBlobSchema = blobSchema ?? this.toolSchemaCache.get(name)?.blobSchema;
 
-    let blobContext: BlobContext | undefined;
+    let blobContext: ExtendedBlobContext | undefined;
+    let toolArgs = args;
 
-    // Prepare blob context if there are blob fields and blob interceptor is available
+    // Transform LLM args to Tool args if there are blob fields
     if (
       this.blobInterceptor &&
       effectiveBlobSchema &&
       (effectiveBlobSchema.inputBlobs.length > 0 || effectiveBlobSchema.outputBlobs.length > 0)
     ) {
-      blobContext = await this.blobInterceptor.prepareBlobContext(args, effectiveBlobSchema);
+      const result = await this.blobInterceptor.transformLlmArgsToToolArgs(
+        args,
+        effectiveBlobSchema
+      );
+      toolArgs = result.toolArgs;
+      blobContext = result.blobContext;
     }
 
-    // Build the full arguments to send to the AWP tool
-    // This includes the original args plus presigned URLs for output blobs
-    const fullArgs = { ...args };
-    if (blobContext && effectiveBlobSchema) {
-      // Add output blob presigned URLs to the arguments
-      for (const field of effectiveBlobSchema.outputBlobs) {
-        fullArgs[field] = blobContext.output[field];
-      }
-    }
-
-    // Send the request
+    // Send the request with Tool-facing arguments
     const response = (await this.sendRequest("tools/call", {
       name,
-      arguments: fullArgs,
+      arguments: toolArgs,
       ...(blobContext && { _blobContext: blobContext }),
     })) as {
       content: Array<{ type: string; text?: string }>;
@@ -351,19 +390,28 @@ export class AwpClient {
       rawData = {};
     }
 
-    // Separate output and blobs
-    const blobs: Record<string, string> = {};
+    // Transform Tool result to LLM result
+    const blobs: Record<string, LlmBlobOutputResultValue> = {};
     const output: Record<string, unknown> = {};
 
-    if (effectiveBlobSchema && blobContext) {
-      // Extract output blob URIs
+    if (effectiveBlobSchema && blobContext && this.blobInterceptor) {
+      // Transform the result using the blob interceptor
+      const llmResult = this.blobInterceptor.transformToolResultToLlmResult(
+        rawData,
+        blobContext,
+        effectiveBlobSchema
+      );
+
+      // Extract output blob values to the blobs object
       for (const field of effectiveBlobSchema.outputBlobs) {
-        // Use the permanent URI from blobContext, not the value from the response
-        blobs[field] = blobContext.outputUri[field];
+        const blobValue = llmResult[field] as LlmBlobOutputResultValue | undefined;
+        if (blobValue) {
+          blobs[field] = blobValue;
+        }
       }
 
       // Copy non-blob fields to output
-      for (const [key, value] of Object.entries(rawData)) {
+      for (const [key, value] of Object.entries(llmResult)) {
         if (!effectiveBlobSchema.outputBlobs.includes(key)) {
           output[key] = value;
         }
@@ -381,11 +429,16 @@ export class AwpClient {
   }
 
   /**
-   * List available tools with AWP blob handling applied
-   * 
+   * List available tools with AWP blob handling applied (LLM-facing schema)
+   *
+   * Transforms Tool-facing schema to LLM-facing schema:
+   * - Input blob params: { url, contentType? } -> { uri, contentType? }
+   * - Output blob params: { url, accept? } -> { accept? } (url removed)
+   * - Output blob result will include: { uri, contentType? }
+   *
    * Returns tool schemas where:
-   * - inputSchema has output blob fields removed (they're handled by the client)
-   * - inputBlobFields lists fields that require s3:// URIs
+   * - inputSchema has blob fields transformed for LLM
+   * - inputBlobFields lists fields that require { uri: "s3://..." } format
    * - outputBlobFields lists fields that will appear in result.blobs
    */
   async listTools(): Promise<{ tools: AwpToolSchema[] }> {
@@ -396,11 +449,8 @@ export class AwpClient {
     for (const cached of this.toolSchemaCache.values()) {
       const { schema, blobSchema } = cached;
 
-      // Clone the inputSchema and remove output blob fields
-      const inputSchema = this.removeOutputBlobsFromSchema(
-        schema.inputSchema,
-        blobSchema.outputBlobs
-      );
+      // Transform the inputSchema for LLM-facing format
+      const inputSchema = this.transformSchemaForLlm(schema.inputSchema, blobSchema);
 
       tools.push({
         name: schema.name,
@@ -415,35 +465,77 @@ export class AwpClient {
   }
 
   /**
-   * Remove output blob fields from the input schema
-   * This creates a new schema without the specified fields
+   * Transform Tool-facing schema to LLM-facing schema
+   *
+   * Input blobs: { url, contentType? } -> { uri, contentType? }
+   * Output blobs: { url, accept? } -> { accept? } (url field removed)
    */
-  private removeOutputBlobsFromSchema(
+  private transformSchemaForLlm(
     schema: Record<string, unknown>,
-    outputBlobs: string[]
+    blobSchema: ToolBlobSchema
   ): Record<string, unknown> {
-    if (outputBlobs.length === 0) {
+    const allBlobFields = [...blobSchema.inputBlobs, ...blobSchema.outputBlobs];
+    if (allBlobFields.length === 0) {
       return schema;
     }
 
     const newSchema = { ...schema };
 
-    // Remove from properties
     if (newSchema.properties && typeof newSchema.properties === "object") {
-      const newProperties = { ...newSchema.properties as Record<string, unknown> };
-      for (const field of outputBlobs) {
-        delete newProperties[field];
+      const newProperties = { ...(newSchema.properties as Record<string, unknown>) };
+
+      // Transform input blob fields: remove 'url', rename to 'uri'
+      for (const field of blobSchema.inputBlobs) {
+        const prop = newProperties[field] as Record<string, unknown> | undefined;
+        if (prop && typeof prop === "object") {
+          const descriptor = blobSchema.blobDescriptors?.[field];
+          newProperties[field] = {
+            type: "object",
+            description: descriptor?.description ?? `Input blob: ${field}`,
+            properties: {
+              uri: {
+                type: "string",
+                format: "uri",
+                description: "Resource identifier for the blob (e.g., s3://bucket/key)",
+              },
+              contentType: {
+                type: "string",
+                description: "MIME type of the blob content",
+              },
+            },
+            required: ["uri"],
+          };
+        }
       }
+
+      // Transform output blob fields: remove 'url', keep only 'accept'
+      for (const field of blobSchema.outputBlobs) {
+        const prop = newProperties[field] as Record<string, unknown> | undefined;
+        if (prop && typeof prop === "object") {
+          const descriptor = blobSchema.blobDescriptors?.[field];
+          newProperties[field] = {
+            type: "object",
+            description: descriptor?.description ?? `Output blob: ${field}`,
+            properties: {
+              accept: {
+                type: "string",
+                description: "Accepted MIME types for the output",
+              },
+            },
+          };
+        }
+      }
+
       newSchema.properties = newProperties;
     }
 
-    // Remove from required array
+    // Update required array: output blob fields are no longer required for LLM
+    // (the url was required for Tool, but for LLM only accept is optional)
     if (Array.isArray(newSchema.required)) {
-      newSchema.required = newSchema.required.filter(
-        (field: string) => !outputBlobs.includes(field)
+      newSchema.required = (newSchema.required as string[]).filter(
+        (field: string) => !blobSchema.outputBlobs.includes(field)
       );
-      // Remove required if empty
-      if (newSchema.required.length === 0) {
+      if ((newSchema.required as string[]).length === 0) {
         delete newSchema.required;
       }
     }

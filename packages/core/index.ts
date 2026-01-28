@@ -42,14 +42,23 @@ export {
 // Blob exports
 export {
   AWP_BLOB_MARKER,
+  type BlobDescriptorMap,
+  type BlobDirection,
   type BlobMetadata,
   type BlobOptions,
   type BlobSchema,
   blob,
+  extractBlobDescriptors,
   extractBlobFields,
+  extractBlobFieldsByDirection,
+  extractCombinedBlobDescriptors,
   extractToolBlobInfo,
   getBlobMetadata,
+  type InputBlobOptions,
+  inputBlob,
   isBlob,
+  type OutputBlobOptions,
+  outputBlob,
   type ToolBlobInfo,
 } from "./src/blob.ts";
 // Define tool exports
@@ -73,6 +82,7 @@ export type {
   AgentWebPortalInstance,
   // Blob types
   BlobContext,
+  BlobFieldDescriptor,
   BlobFieldMetadata,
   // HTTP types
   HttpRequest,
@@ -82,6 +92,10 @@ export type {
   JsonRpcRequest,
   JsonRpcResponse,
   JsonRpcSuccessResponse,
+  // LLM-facing blob value types
+  LlmBlobInputValue,
+  LlmBlobOutputInputValue,
+  LlmBlobOutputResultValue,
   McpToolAwpExtension,
   McpToolSchema,
   McpToolsCallParams,
@@ -94,7 +108,11 @@ export type {
   SkillRegistrationOptions,
   SkillsListResponse,
   SkillsMap,
+  // Tool-facing blob value types
+  ToolBlobInputValue,
   ToolBlobMetadata,
+  ToolBlobOutputInputValue,
+  ToolBlobOutputResultValue,
   ToolDefinition,
   // Tool types
   ToolHandler,
