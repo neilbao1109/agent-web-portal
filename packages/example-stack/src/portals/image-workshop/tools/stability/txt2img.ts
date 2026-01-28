@@ -4,7 +4,7 @@
  * Generates images from text prompts using Stable Diffusion XL
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApiV1, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -45,7 +45,7 @@ export const txt2imgTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Generated image" }),
+    image: outputBlob({ accept: "image/png", description: "Generated image" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

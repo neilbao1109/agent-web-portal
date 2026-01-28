@@ -4,7 +4,7 @@
  * Find and recolor specific objects in images
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const searchRecolorTool = defineTool({
   description: "Find objects in an image using text and change their color",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image" }),
     select_prompt: z.string().describe("Description of the object to find and recolor"),
     prompt: z.string().describe("Description of the desired color/appearance"),
     negative_prompt: z.string().optional().describe("What to avoid"),
@@ -24,7 +24,7 @@ export const searchRecolorTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Image with recolored object" }),
+    image: outputBlob({ accept: "image/png", description: "Image with recolored object" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

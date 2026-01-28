@@ -4,9 +4,9 @@
  * Context-aware image editing and transformation
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
-import { callBflApi, getContentType, urlToBase64 } from "../../lib/bfl-api.ts";
+import { callBflApi, getContentType } from "../../lib/bfl-api.ts";
 import { getBflApiKey } from "../../secrets.ts";
 
 export const fluxKontextTool = defineTool({
@@ -14,7 +14,7 @@ export const fluxKontextTool = defineTool({
   description: "Edit or transform an image using context-aware FLUX Kontext model",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image to edit" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image to edit" }),
     prompt: z.string().describe("Description of the edit or transformation to apply"),
     aspect_ratio: z
       .enum(["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"])
@@ -35,7 +35,7 @@ export const fluxKontextTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Edited image" }),
+    image: outputBlob({ accept: "image/png", description: "Edited image" }),
     metadata: z.object({
       id: z.string().describe("Task ID from BFL API"),
       seed: z.number().optional().describe("Seed used for generation"),

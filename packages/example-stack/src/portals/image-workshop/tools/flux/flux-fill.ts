@@ -4,7 +4,7 @@
  * Inpainting/filling masked regions
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callBflApi, getContentType } from "../../lib/bfl-api.ts";
 import { getBflApiKey } from "../../secrets.ts";
@@ -14,8 +14,11 @@ export const fluxFillTool = defineTool({
   description: "Fill masked regions of an image with AI-generated content using FLUX",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image to edit" }),
-    mask: blob({ mimeType: "image/*", description: "Mask image (white areas will be filled)" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image to edit" }),
+    mask: inputBlob({
+      mimeType: "image/*",
+      description: "Mask image (white areas will be filled)",
+    }),
     prompt: z.string().describe("Description of what to generate in the masked area"),
     prompt_upsampling: z
       .boolean()
@@ -32,7 +35,7 @@ export const fluxFillTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Image with filled regions" }),
+    image: outputBlob({ accept: "image/png", description: "Image with filled regions" }),
     metadata: z.object({
       id: z.string().describe("Task ID from BFL API"),
       seed: z.number().optional().describe("Seed used for generation"),

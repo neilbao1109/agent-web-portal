@@ -4,7 +4,7 @@
  * Flexible generation with adjustable guidance scale
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callBflApi, getContentType } from "../../lib/bfl-api.ts";
 import { getBflApiKey } from "../../secrets.ts";
@@ -34,7 +34,7 @@ export const fluxFlexTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Generated image" }),
+    image: outputBlob({ accept: "image/png", description: "Generated image" }),
     metadata: z.object({
       id: z.string().describe("Task ID from BFL API"),
       seed: z.number().optional().describe("Seed used for generation"),

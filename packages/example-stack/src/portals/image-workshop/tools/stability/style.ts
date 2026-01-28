@@ -4,7 +4,7 @@
  * Apply style references to generated images
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const styleTool = defineTool({
   description: "Generate an image with the visual style of a reference image",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Style reference image" }),
+    image: inputBlob({ mimeType: "image/*", description: "Style reference image" }),
     prompt: z.string().describe("Description of the content to generate"),
     negative_prompt: z.string().optional().describe("What to avoid generating"),
     fidelity: z
@@ -28,7 +28,7 @@ export const styleTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Generated image with applied style" }),
+    image: outputBlob({ accept: "image/png", description: "Generated image with applied style" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

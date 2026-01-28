@@ -23,7 +23,6 @@ for (const tool of stabilityTools) {
     description: tool.description,
     inputSchema: tool.inputSchema,
     outputSchema: tool.outputSchema,
-    // biome-ignore lint/suspicious/noExplicitAny: AWP handler types are complex
     handler: tool.handler as any,
   });
 }
@@ -34,7 +33,6 @@ for (const tool of fluxTools) {
     description: tool.description,
     inputSchema: tool.inputSchema,
     outputSchema: tool.outputSchema,
-    // biome-ignore lint/suspicious/noExplicitAny: AWP handler types are complex
     handler: tool.handler as any,
   });
 }

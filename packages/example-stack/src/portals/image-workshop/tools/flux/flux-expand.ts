@@ -4,7 +4,7 @@
  * Outpainting/extending images beyond boundaries
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callBflApi, getContentType } from "../../lib/bfl-api.ts";
 import { getBflApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const fluxExpandTool = defineTool({
   description: "Extend an image beyond its boundaries in any direction using FLUX",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image to extend" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image to extend" }),
     prompt: z.string().optional().describe("Description of content to generate in extended areas"),
     top: z.number().min(0).max(1024).default(0).describe("Pixels to extend upward"),
     bottom: z.number().min(0).max(1024).default(0).describe("Pixels to extend downward"),
@@ -35,7 +35,7 @@ export const fluxExpandTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Extended image" }),
+    image: outputBlob({ accept: "image/png", description: "Extended image" }),
     metadata: z.object({
       id: z.string().describe("Task ID from BFL API"),
       seed: z.number().optional().describe("Seed used for generation"),

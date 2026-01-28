@@ -4,7 +4,7 @@
  * Extend images beyond their original boundaries
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const outpaintTool = defineTool({
   description: "Extend an image beyond its original boundaries in any direction",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image to extend" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image to extend" }),
     prompt: z.string().optional().describe("Description of content to generate in extended areas"),
     negative_prompt: z.string().optional().describe("What to avoid generating"),
     left: z.number().min(0).max(2000).default(0).describe("Pixels to extend on the left"),
@@ -32,7 +32,7 @@ export const outpaintTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Extended image" }),
+    image: outputBlob({ accept: "image/png", description: "Extended image" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

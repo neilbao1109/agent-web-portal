@@ -4,7 +4,7 @@
  * Generate images from sketch inputs using ControlNet
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,10 @@ export const sketchTool = defineTool({
   description: "Generate a detailed image from a sketch or line drawing",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Sketch or line drawing to use as guide" }),
+    image: inputBlob({
+      mimeType: "image/*",
+      description: "Sketch or line drawing to use as guide",
+    }),
     prompt: z.string().describe("Description of the image to generate"),
     negative_prompt: z.string().optional().describe("What to avoid generating"),
     control_strength: z
@@ -28,7 +31,7 @@ export const sketchTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Generated image from sketch" }),
+    image: outputBlob({ accept: "image/png", description: "Generated image from sketch" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

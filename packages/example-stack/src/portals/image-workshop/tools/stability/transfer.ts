@@ -4,7 +4,7 @@
  * Transfer artistic styles between images
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,8 +14,8 @@ export const transferTool = defineTool({
   description: "Transfer the artistic style from one image to another",
 
   input: {
-    source: blob({ mimeType: "image/*", description: "Source image (content to keep)" }),
-    style: blob({ mimeType: "image/*", description: "Style image (style to apply)" }),
+    source: inputBlob({ mimeType: "image/*", description: "Source image (content to keep)" }),
+    style: inputBlob({ mimeType: "image/*", description: "Style image (style to apply)" }),
     prompt: z.string().optional().describe("Additional guidance for the transfer"),
     negative_prompt: z.string().optional().describe("What to avoid"),
     strength: z
@@ -29,7 +29,7 @@ export const transferTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Image with transferred style" }),
+    image: outputBlob({ accept: "image/png", description: "Image with transferred style" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

@@ -4,7 +4,7 @@
  * Remove image backgrounds cleanly
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const removeBgTool = defineTool({
   description: "Remove the background from an image, leaving only the main subject",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image" }),
     output_format: z
       .enum(["png", "webp"])
       .default("png")
@@ -22,7 +22,7 @@ export const removeBgTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Image with background removed" }),
+    image: outputBlob({ accept: "image/png", description: "Image with background removed" }),
     metadata: z.object({
       finish_reason: z.string().describe("Reason generation finished"),
     }),

@@ -4,7 +4,7 @@
  * Generate images following structural edge/depth maps
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const structureTool = defineTool({
   description: "Generate an image following the structural layout of a reference image",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Reference image for structure" }),
+    image: inputBlob({ mimeType: "image/*", description: "Reference image for structure" }),
     prompt: z.string().describe("Description of the image to generate"),
     negative_prompt: z.string().optional().describe("What to avoid generating"),
     control_strength: z
@@ -28,7 +28,7 @@ export const structureTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Generated image following structure" }),
+    image: outputBlob({ accept: "image/png", description: "Generated image following structure" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

@@ -4,7 +4,7 @@
  * Find and replace objects in images using text descriptions
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,7 +14,7 @@ export const searchReplaceTool = defineTool({
   description: "Find objects in an image using text and replace them with something else",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image" }),
     search_prompt: z.string().describe("Description of the object to find and replace"),
     prompt: z.string().describe("Description of what to replace it with"),
     negative_prompt: z.string().optional().describe("What to avoid in the replacement"),
@@ -24,7 +24,7 @@ export const searchReplaceTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Image with replaced object" }),
+    image: outputBlob({ accept: "image/png", description: "Image with replaced object" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),

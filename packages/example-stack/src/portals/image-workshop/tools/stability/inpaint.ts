@@ -4,7 +4,7 @@
  * Fill masked regions with AI-generated content
  */
 
-import { blob, defineTool } from "@agent-web-portal/core";
+import { defineTool, inputBlob, outputBlob } from "@agent-web-portal/core";
 import { z } from "zod";
 import { callStabilityApi, getContentType } from "../../lib/stability-api.ts";
 import { getStabilityApiKey } from "../../secrets.ts";
@@ -14,8 +14,11 @@ export const inpaintTool = defineTool({
   description: "Fill masked regions of an image with AI-generated content based on a prompt",
 
   input: {
-    image: blob({ mimeType: "image/*", description: "Source image to edit" }),
-    mask: blob({ mimeType: "image/*", description: "Mask image (white areas will be inpainted)" }),
+    image: inputBlob({ mimeType: "image/*", description: "Source image to edit" }),
+    mask: inputBlob({
+      mimeType: "image/*",
+      description: "Mask image (white areas will be inpainted)",
+    }),
     prompt: z.string().describe("Description of what to generate in the masked area"),
     negative_prompt: z.string().optional().describe("What to avoid generating"),
     grow_mask: z.number().min(0).max(100).default(5).describe("Pixels to expand the mask by"),
@@ -24,7 +27,7 @@ export const inpaintTool = defineTool({
   },
 
   output: {
-    image: blob({ mimeType: "image/png", description: "Result image with inpainted content" }),
+    image: outputBlob({ accept: "image/png", description: "Result image with inpainted content" }),
     metadata: z.object({
       seed: z.number().describe("Seed used for generation"),
       finish_reason: z.string().describe("Reason generation finished"),
