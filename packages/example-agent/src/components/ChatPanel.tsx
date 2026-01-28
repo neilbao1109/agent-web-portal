@@ -83,55 +83,61 @@ export function ChatPanel({
       overflow: 'hidden',
       bgcolor: 'grey.100', // Background for the sides
     }}>
-      {/* Messages */}
+      {/* Messages - scrollable area */}
       <Box sx={{ 
         flex: 1, 
         overflow: 'auto', 
         minHeight: 0,
-        display: 'flex',
-        justifyContent: 'center',
       }}>
+        {/* Centered container */}
         <Box sx={{
-          width: '100%',
-          maxWidth: 900,
-          bgcolor: 'background.paper',
-          p: { xs: 1, sm: 2 },
-          boxShadow: { xs: 0, sm: 1 },
+          display: 'flex',
+          justifyContent: 'center',
+          minHeight: '100%', // At least fill the viewport
         }}>
-          {messages.length === 0 && !streamingMessage && (
-            <Box
-              sx={{
-                height: '100%',
-                minHeight: 200,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                px: 2,
-              }}
-            >
-              <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
-                Start a conversation or load a skill to begin.
-              </Typography>
-            </Box>
-          )}
+          {/* Paper - grows with content */}
+          <Box sx={{
+            width: '100%',
+            maxWidth: 900,
+            bgcolor: 'background.paper',
+            p: { xs: 1, sm: 2 },
+            boxShadow: { xs: 0, sm: 1 },
+            minHeight: '100%', // At least fill the container
+          }}>
+            {messages.length === 0 && !streamingMessage && (
+              <Box
+                sx={{
+                  height: 200,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2,
+                }}
+              >
+                <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
+                  Start a conversation or load a skill to begin.
+                </Typography>
+              </Box>
+            )}
 
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} isMobile={isMobile} />
-          ))}
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} isMobile={isMobile} />
+            ))}
 
-          {/* Streaming message */}
-          {streamingMessage && (
-            <StreamingMessageBubble streamingMessage={streamingMessage} isMobile={isMobile} />
-          )}
+            {/* Streaming message */}
+            {streamingMessage && (
+              <StreamingMessageBubble streamingMessage={streamingMessage} isMobile={isMobile} />
+            )}
 
-          {/* Error */}
-          {error && (
-            <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
-              <Typography variant="body2">{error}</Typography>
-            </Paper>
-          )}
+            {/* Error */}
+            {error && (
+              <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
+                <Typography variant="body2">{error}</Typography>
+              </Paper>
+            )}
 
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </Box>
         </Box>
       </Box>
 
@@ -245,12 +251,15 @@ function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boo
         mb: { xs: 1.5, sm: 2 },
         display: 'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
+        minWidth: 0, // Prevent flex item from overflowing
       }}
     >
       <Paper
         sx={{
           p: { xs: 1.5, sm: 2 },
           maxWidth: isMobile ? '90%' : '80%',
+          minWidth: 0, // Allow shrinking
+          overflow: 'hidden', // Prevent content overflow
           bgcolor: isUser ? 'primary.main' : 'grey.100',
           color: isUser ? 'primary.contrastText' : 'text.primary',
           borderRadius: 2,
@@ -302,22 +311,31 @@ function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boo
               sx={{
                 '& > *:first-of-type': { mt: 0 },
                 '& > *:last-child': { mb: 0 },
+                overflow: 'hidden', // Prevent content overflow
+                wordBreak: 'break-word', // Break long words
                 '& code': {
                   bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                   px: 0.5,
                   borderRadius: 0.5,
                   fontFamily: 'monospace',
+                  wordBreak: 'break-all', // Break long code
                 },
                 '& pre': {
                   bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                   p: 1,
                   borderRadius: 1,
                   overflow: 'auto',
+                  maxWidth: '100%',
                 },
                 '& img': {
                   maxWidth: '100%',
                   borderRadius: 1,
                   mt: 1,
+                },
+                '& table': {
+                  maxWidth: '100%',
+                  overflow: 'auto',
+                  display: 'block',
                 },
               }}
             >
