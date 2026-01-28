@@ -743,7 +743,13 @@ export default function PortalTest() {
   const TOOL_EXAMPLES: Record<string, Record<string, unknown>> = {
     txt2img: {
       prompt: 'a boy with his dog',
-      style: 'anime',
+      negative_prompt: '',
+      width: 1024,
+      height: 1024,
+      steps: 30,
+      cfg_scale: 7.0,
+      style_preset: 'anime',
+      output_format: 'png',
     },
     jsonata_eval: {
       expression: '$sum(items.price)',
