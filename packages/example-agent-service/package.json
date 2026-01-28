@@ -1,0 +1,40 @@
+{
+  "name": "@agent-web-portal/example-agent-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight storage provider service for Agent Web Portal clients with Cognito authentication",
+  "type": "module",
+  "main": "dist/handler.mjs",
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun run server.ts",
+    "dev:sam": "bun run build && sam build && sam local start-api --port 3500",
+    "clean": "rimraf .turbo dist .aws-sam",
+    "build": "bun build src/handler.ts --outdir dist --format esm --target node --external '@aws-sdk/*' && mv dist/handler.js dist/handler.mjs",
+    "sam:build": "bun run build && sam build",
+    "sam:local": "sam local start-api --port 3500",
+    "sam:deploy": "sam deploy",
+    "sam:remove": "sam delete",
+    "deploy": "bun run sam:build && bun run sam:deploy",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.758.0",
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
+    "jose": "^5.9.6",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.147",
+    "@types/bun": "latest",
+    "@types/node": "^22.10.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  }
+}
