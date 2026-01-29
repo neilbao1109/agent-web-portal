@@ -5,6 +5,14 @@
  * For production, use `npx sst deploy` to deploy to AWS.
  *
  * Run with: bun run server.ts
+ *
+ * LocalStack S3 Support:
+ * To use LocalStack S3 for blob storage during local development:
+ *   1. Start LocalStack: docker run -d --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack
+ *   2. Create bucket: aws --endpoint-url=http://localhost:4566 s3 mb s3://awp-examples-blobs
+ *   3. Set environment variables:
+ *        S3_ENDPOINT=http://localhost:4566
+ *        BLOB_BUCKET=awp-examples-blobs
  */
 
 // Polyfill for JSZip
@@ -38,6 +46,17 @@ import {
   writeOutputBlob,
 } from "./src/portals/blob.ts";
 import {
+  createOutputBlobSlotS3,
+  getStoredImageS3,
+  getTempUploadS3,
+  isS3BlobStorageConfigured,
+  listStoredImagesS3,
+  readOutputBlobS3,
+  storeImageS3,
+  storeTempUploadS3,
+  writeOutputBlobS3,
+} from "./src/portals/blob-s3.ts";
+import {
   authPortal,
   basicPortal,
   blobPortal,
@@ -51,6 +70,9 @@ import {
 // =============================================================================
 
 const PORT = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3400;
+
+// Check if S3 storage is configured (LocalStack or real S3)
+const USE_S3_STORAGE = isS3BlobStorageConfigured() && !!process.env.S3_ENDPOINT;
 
 // =============================================================================
 // Utility Functions
@@ -299,7 +321,9 @@ async function handleRequest(req: Request): Promise<Response> {
         }
 
         const data = await file.arrayBuffer();
-        const result = storeTempUpload(data, file.type || "image/png");
+
+        // Use in-memory storage
+        const result = USE_S3_STORAGE ? await storeTempUploadS3(data, file.type || "image/png") : storeTempUpload(data, file.type || "image/png");
 
         // Build absolute URLs using the request's Host header
         const host = req.headers.get("host") || `localhost:${PORT}`;
@@ -324,7 +348,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // Handle raw binary upload
       const data = await req.arrayBuffer();
       const imageContentType = contentType.startsWith("image/") ? contentType : "image/png";
-      const result = storeTempUpload(data, imageContentType);
+      const result = USE_S3_STORAGE ? await storeTempUploadS3(data, imageContentType) : storeTempUpload(data, imageContentType);
 
       // Build absolute URLs using the request's Host header
       const host = req.headers.get("host") || `localhost:${PORT}`;
@@ -352,10 +376,11 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
-  // Get temporary upload (presigned GET URL equivalent)
+  // Get temporary upload (presigned GET URL equivalent) - only for in-memory storage
+  // When using S3, the readUrl is a presigned S3 URL, so this endpoint is not needed
   if (pathname.startsWith("/api/blob/temp/") && req.method === "GET") {
     const id = decodeURIComponent(pathname.slice("/api/blob/temp/".length));
-    const upload = getTempUpload(id);
+    const upload = USE_S3_STORAGE ? await getTempUploadS3(id) : getTempUpload(id);
 
     if (!upload) {
       return new Response(JSON.stringify({ error: "Temporary upload not found or expired" }), {
@@ -379,7 +404,7 @@ async function handleRequest(req: Request): Promise<Response> {
     (pathname === "/api/blob/prepare-download" || pathname === "/api/blob/prepare-output") &&
     req.method === "POST"
   ) {
-    const result = createOutputBlobSlot();
+    const result = USE_S3_STORAGE ? await createOutputBlobSlotS3() : createOutputBlobSlot();
     // Build absolute URLs using the request's Host header
     const host = req.headers.get("host") || `localhost:${PORT}`;
     const protocol = req.headers.get("x-forwarded-proto") || "http";
@@ -401,6 +426,8 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // Write to output blob (presigned PUT URL equivalent)
+  // When using S3 with presigned URLs, clients write directly to S3
+  // This endpoint is still useful for in-memory storage
   if (pathname.startsWith("/api/blob/output/") && req.method === "PUT") {
     const id = decodeURIComponent(pathname.slice("/api/blob/output/".length));
     const contentType = req.headers.get("content-type") ?? "application/octet-stream";
@@ -410,7 +437,7 @@ async function handleRequest(req: Request): Promise<Response> {
       `[Blob] Writing output blob: ${id}, contentType: ${contentType}, size: ${data.byteLength} bytes`
     );
 
-    const success = writeOutputBlob(id, data, contentType);
+    const success = USE_S3_STORAGE ? await writeOutputBlobS3(id, data, contentType) : writeOutputBlob(id, data, contentType);
 
     if (!success) {
       console.error(`[Blob] Failed to write output blob: ${id} - not found or expired`);
@@ -434,7 +461,7 @@ async function handleRequest(req: Request): Promise<Response> {
   if (pathname.startsWith("/api/blob/output/") && req.method === "GET") {
     const id = decodeURIComponent(pathname.slice("/api/blob/output/".length));
     console.log(`[Blob] Reading output blob: ${id}`);
-    const blob = readOutputBlob(id);
+    const blob = USE_S3_STORAGE ? await readOutputBlobS3(id) : readOutputBlob(id);
 
     if (!blob) {
       console.error(`[Blob] Output blob not found: ${id}`);
@@ -470,7 +497,7 @@ async function handleRequest(req: Request): Promise<Response> {
         }
 
         const data = await file.arrayBuffer();
-        const result = storeImage(data, file.type || "image/png");
+        const result = USE_S3_STORAGE ? await storeImageS3(data, file.type || "image/png") : storeImage(data, file.type || "image/png");
 
         return new Response(JSON.stringify(result), {
           status: 200,
@@ -484,7 +511,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // Handle raw binary upload
       const data = await req.arrayBuffer();
       const imageContentType = contentType.startsWith("image/") ? contentType : "image/png";
-      const result = storeImage(data, imageContentType);
+      const result = USE_S3_STORAGE ? await storeImageS3(data, imageContentType) : storeImage(data, imageContentType);
 
       return new Response(JSON.stringify(result), {
         status: 200,
@@ -504,7 +531,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // Download image from permanent storage
   if (pathname.startsWith("/api/blob/files/") && req.method === "GET") {
     const key = decodeURIComponent(pathname.slice("/api/blob/files/".length));
-    const image = getStoredImage(key);
+    const image = USE_S3_STORAGE ? await getStoredImageS3(key) : getStoredImage(key);
 
     if (!image) {
       return new Response(JSON.stringify({ error: "Image not found or expired" }), {
@@ -525,7 +552,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // List images in permanent storage
   if (pathname === "/api/blob/files" && req.method === "GET") {
-    const images = listStoredImages();
+    const images = USE_S3_STORAGE ? await listStoredImagesS3() : listStoredImages();
     return new Response(JSON.stringify({ images, count: images.length }), {
       status: 200,
       headers: {
@@ -1126,9 +1153,15 @@ const server = Bun.serve({
   fetch: handleRequest,
 });
 
+const storageMode = USE_S3_STORAGE
+  ? `S3 (LocalStack: ${process.env.S3_ENDPOINT}, Bucket: ${process.env.BLOB_BUCKET})`
+  : "In-Memory";
+
 console.log(`
 🚀 AWP Examples - Local Development Server
    URL: http://localhost:${PORT}
+
+💾 Storage Mode: ${storageMode}
 
 📡 Available Portals (MCP Endpoints):
    - /api/awp/basic         - Basic greeting portal
@@ -1163,6 +1196,11 @@ console.log(`
 📦 Deployment:
    - bun run sam:build  - Build for SAM
    - bun run sam:deploy - Deploy to AWS
+
+🐳 LocalStack S3 Setup (optional):
+   docker run -d --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack
+   AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 s3 mb s3://awp-examples-blobs
+   S3_ENDPOINT=http://localhost:4566 BLOB_BUCKET=awp-examples-blobs bun run dev:sam
 
 Press Ctrl+C to stop.
 `);
