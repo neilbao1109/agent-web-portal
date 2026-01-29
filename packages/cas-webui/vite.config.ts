@@ -1,13 +1,14 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// API URL: defaults to local dev server, can override with --url flag
-// Usage:
-//   bun run dev                    -> uses http://localhost:3500 (local CAS server)
-//   bun run dev --url <endpoint>   -> uses custom API endpoint
+// API URL configuration:
+//   1. --url <endpoint> flag takes highest priority
+//   2. CAS_API_PORT env var (from .env) sets the port
+//   3. Falls back to port 3550
 const args = process.argv.slice(2);
 const urlIndex = args.indexOf("--url");
-let apiUrl = "http://localhost:3500"; // default: local CAS server
+const defaultPort = process.env.CAS_API_PORT ?? "3550";
+let apiUrl = `http://localhost:${defaultPort}`;
 
 if (urlIndex !== -1 && args[urlIndex + 1]) {
   apiUrl = args[urlIndex + 1];

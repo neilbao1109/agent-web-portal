@@ -2,9 +2,11 @@
  * CAS Stack - Local Development Server (Bun)
  *
  * Uses in-memory storage for local development without AWS dependencies.
+ * Supports Cognito JWT authentication for cas-webui integration.
  */
 
 import { createHash } from "crypto";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import type {
   CasConfig,
   HttpRequest,
@@ -178,6 +180,44 @@ class MemoryOwnershipDb {
     this.ownership.set(this.key(scope, casKey), record);
     return record;
   }
+
+  async listNodes(
+    scope: string,
+    limit: number = 10,
+    startKey?: string
+  ): Promise<{ nodes: CasOwnership[]; nextKey?: string; total: number }> {
+    // Get all nodes for this scope
+    const allNodes: CasOwnership[] = [];
+    for (const record of this.ownership.values()) {
+      if (record.scope === scope) {
+        allNodes.push(record);
+      }
+    }
+
+    // Sort by createdAt descending (newest first)
+    allNodes.sort((a, b) => b.createdAt - a.createdAt);
+
+    // Find start position
+    let startIndex = 0;
+    if (startKey) {
+      const idx = allNodes.findIndex((n) => n.key === startKey);
+      if (idx !== -1) {
+        startIndex = idx + 1;
+      }
+    }
+
+    // Paginate
+    const nodes = allNodes.slice(startIndex, startIndex + limit);
+    const nextKey = nodes.length === limit && startIndex + limit < allNodes.length
+      ? nodes[nodes.length - 1]?.key
+      : undefined;
+
+    return { nodes, nextKey, total: allNodes.length };
+  }
+
+  async deleteOwnership(scope: string, casKey: string): Promise<boolean> {
+    return this.ownership.delete(this.key(scope, casKey));
+  }
 }
 
 class MemoryDagDb {
@@ -267,89 +307,42 @@ class MemoryCasStorage {
 }
 
 // ============================================================================
-// Mock Auth Service (for local dev without Cognito)
+// Cognito JWT Verifier (for cas-webui integration)
 // ============================================================================
 
-class MockAuthService {
-  private tokensDb: MemoryTokensDb;
-  private users = new Map<string, { id: string; email: string; password: string; name?: string }>();
+// Cognito configuration from environment
+const COGNITO_USER_POOL_ID = process.env.VITE_COGNITO_USER_POOL_ID ?? "";
+const COGNITO_REGION = COGNITO_USER_POOL_ID.split("_")[0] ?? "us-east-1";
+const COGNITO_ISSUER = COGNITO_USER_POOL_ID
+  ? `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}`
+  : "";
 
-  constructor(tokensDb: MemoryTokensDb) {
-    this.tokensDb = tokensDb;
-    // Add a test user
-    this.users.set("test@example.com", {
-      id: "test-user-123",
-      email: "test@example.com",
-      password: "password123",
-      name: "Test User",
+// JWKS for Cognito JWT verification
+const cognitoJwks = COGNITO_USER_POOL_ID
+  ? createRemoteJWKSet(new URL(`${COGNITO_ISSUER}/.well-known/jwks.json`))
+  : null;
+
+interface CognitoTokenPayload {
+  sub: string;
+  email?: string;
+  name?: string;
+  token_use: "access" | "id";
+  exp: number;
+}
+
+async function verifyCognitoToken(token: string): Promise<CognitoTokenPayload | null> {
+  if (!cognitoJwks || !COGNITO_ISSUER) {
+    return null;
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, cognitoJwks, {
+      issuer: COGNITO_ISSUER,
     });
-  }
-
-  async login(email: string, password: string) {
-    const user = this.users.get(email);
-    if (!user || user.password !== password) {
-      throw new Error("Invalid credentials");
-    }
-
-    const userToken = await this.tokensDb.createUserToken(
-      user.id,
-      "mock-refresh-token",
-      3600
-    );
-
-    return {
-      userToken: MemoryTokensDb.extractTokenId(userToken.pk),
-      refreshToken: "mock-refresh-token",
-      expiresAt: new Date(userToken.expiresAt).toISOString(),
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
-    };
-  }
-
-  async refresh(refreshToken: string) {
-    // In mock mode, just create a new token for test user
-    const userToken = await this.tokensDb.createUserToken(
-      "test-user-123",
-      refreshToken,
-      3600
-    );
-
-    return {
-      userToken: MemoryTokensDb.extractTokenId(userToken.pk),
-      expiresAt: new Date(userToken.expiresAt).toISOString(),
-    };
-  }
-
-  async createAgentToken(userId: string, name: string, permissions: TokenPermissions) {
-    const token = await this.tokensDb.createAgentToken(userId, name, permissions);
-    const tokenId = MemoryTokensDb.extractTokenId(token.pk);
-    return {
-      id: tokenId,
-      token: tokenId,
-      name,
-      permissions,
-      createdAt: new Date(token.createdAt).toISOString(),
-      expiresAt: new Date(token.expiresAt).toISOString(),
-    };
-  }
-
-  async createTicket(
-    scope: string,
-    issuerId: string,
-    type: "read" | "write",
-    key?: string
-  ) {
-    const ticket = await this.tokensDb.createTicket(scope, issuerId, type, key);
-    const ticketId = MemoryTokensDb.extractTokenId(ticket.pk);
-    return {
-      id: ticketId,
-      type,
-      key,
-      expiresAt: new Date(ticket.expiresAt).toISOString(),
-    };
+    return payload as unknown as CognitoTokenPayload;
+  } catch (error) {
+    console.error("[Cognito] JWT verification failed:", error);
+    return null;
   }
 }
 
@@ -361,7 +354,6 @@ const tokensDb = new MemoryTokensDb();
 const ownershipDb = new MemoryOwnershipDb();
 const dagDb = new MemoryDagDb();
 const casStorage = new MemoryCasStorage();
-const authService = new MockAuthService(tokensDb);
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -405,10 +397,37 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return null;
 
-  const [scheme, tokenId] = authHeader.split(" ");
-  if (!tokenId) return null;
+  const [scheme, tokenValue] = authHeader.split(" ");
+  if (!tokenValue) return null;
 
-  const token = await tokensDb.getToken(tokenId);
+  // Check if it's a JWT (Cognito token) - JWTs have 3 parts separated by dots
+  if (tokenValue.split(".").length === 3) {
+    const cognitoPayload = await verifyCognitoToken(tokenValue);
+    if (cognitoPayload) {
+      // Create or get user token for this Cognito user
+      const userId = cognitoPayload.sub;
+      
+      // Check if we already have a user token for this session
+      // For simplicity, create a new one each time (or reuse existing)
+      const userToken = await tokensDb.createUserToken(userId, "cognito-session", 3600);
+      const tokenId = MemoryTokensDb.extractTokenId(userToken.pk);
+      
+      console.log(`[Cognito] Authenticated user: ${cognitoPayload.email ?? userId}`);
+      
+      return {
+        userId,
+        scope: `usr_${userId}`,
+        canRead: true,
+        canWrite: true,
+        canIssueTicket: true,
+        tokenId,
+      };
+    }
+    // If JWT verification failed, fall through to try as internal token
+  }
+
+  // Try as internal token (user token, agent token, or ticket)
+  const token = await tokensDb.getToken(tokenValue);
   if (!token) return null;
 
   const id = MemoryTokensDb.extractTokenId(token.pk);
@@ -455,34 +474,10 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
 // ============================================================================
 
 async function handleAuth(req: Request, path: string): Promise<Response> {
-  // POST /auth/login
-  if (req.method === "POST" && path === "/login") {
-    const body = await req.json() as { email?: string; password?: string };
-    if (!body.email || !body.password) {
-      return errorResponse(400, "Missing email or password");
-    }
-    try {
-      const result = await authService.login(body.email, body.password);
-      return jsonResponse(200, result);
-    } catch (e: any) {
-      return errorResponse(401, e.message);
-    }
-  }
-
-  // POST /auth/refresh
-  if (req.method === "POST" && path === "/refresh") {
-    const body = await req.json() as { refreshToken?: string };
-    if (!body.refreshToken) {
-      return errorResponse(400, "Missing refreshToken");
-    }
-    const result = await authService.refresh(body.refreshToken);
-    return jsonResponse(200, result);
-  }
-
-  // Authenticated routes
+  // Authenticated routes only - login is handled by Cognito via cas-webui
   const auth = await authenticate(req);
   if (!auth) {
-    return errorResponse(401, "Unauthorized");
+    return errorResponse(401, "Unauthorized - use Cognito via cas-webui to login");
   }
 
   // POST /auth/agent-token
@@ -491,12 +486,16 @@ async function handleAuth(req: Request, path: string): Promise<Response> {
     if (!body.name || !body.permissions) {
       return errorResponse(400, "Missing name or permissions");
     }
-    const result = await authService.createAgentToken(
-      auth.userId,
-      body.name,
-      body.permissions
-    );
-    return jsonResponse(201, result);
+    const token = await tokensDb.createAgentToken(auth.userId, body.name, body.permissions);
+    const tokenId = MemoryTokensDb.extractTokenId(token.pk);
+    return jsonResponse(201, {
+      id: tokenId,
+      token: tokenId,
+      name: body.name,
+      permissions: body.permissions,
+      createdAt: new Date(token.createdAt).toISOString(),
+      expiresAt: new Date(token.expiresAt).toISOString(),
+    });
   }
 
   // GET /auth/agent-tokens
@@ -537,13 +536,14 @@ async function handleAuth(req: Request, path: string): Promise<Response> {
     if (body.type === "read" && !body.key) {
       return errorResponse(400, "Read tickets require a key");
     }
-    const result = await authService.createTicket(
-      auth.scope,
-      auth.tokenId,
-      body.type,
-      body.key
-    );
-    return jsonResponse(201, result);
+    const ticket = await tokensDb.createTicket(auth.scope, auth.tokenId, body.type, body.key);
+    const ticketId = MemoryTokensDb.extractTokenId(ticket.pk);
+    return jsonResponse(201, {
+      id: ticketId,
+      type: body.type,
+      key: body.key,
+      expiresAt: new Date(ticket.expiresAt).toISOString(),
+    });
   }
 
   // DELETE /auth/ticket/:id
@@ -571,6 +571,19 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
   const effectiveScope = scope === "@me" ? auth.scope : scope;
   if (effectiveScope !== auth.scope) {
     return errorResponse(403, "Access denied to this scope");
+  }
+
+  // GET /cas/{scope}/nodes - List all nodes in scope
+  if (req.method === "GET" && subPath === "/nodes") {
+    if (!auth.canRead) {
+      return errorResponse(403, "Read access denied");
+    }
+    const url = new URL(req.url);
+    const limit = parseInt(url.searchParams.get("limit") ?? "10", 10);
+    const startKey = url.searchParams.get("startKey") ?? undefined;
+
+    const result = await ownershipDb.listNodes(effectiveScope, limit, startKey);
+    return jsonResponse(200, result);
   }
 
   // POST /cas/{scope}/resolve
@@ -644,6 +657,24 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
     return binaryResponse(blob.content, blob.contentType);
   }
 
+  // DELETE /cas/{scope}/node/:key
+  const deleteNodeMatch = subPath.match(/^\/node\/(.+)$/);
+  if (req.method === "DELETE" && deleteNodeMatch) {
+    if (!auth.canWrite) {
+      return errorResponse(403, "Write access denied");
+    }
+    const key = decodeURIComponent(deleteNodeMatch[1]!);
+
+    const hasAccess = await ownershipDb.hasOwnership(effectiveScope, key);
+    if (!hasAccess) {
+      return errorResponse(404, "Not found");
+    }
+
+    await ownershipDb.deleteOwnership(effectiveScope, key);
+    // Note: We don't delete the actual blob - CAS is immutable, we just remove ownership
+    return jsonResponse(200, { success: true, key });
+  }
+
   // GET /cas/{scope}/dag/:key
   const getDagMatch = subPath.match(/^\/dag\/(.+)$/);
   if (req.method === "GET" && getDagMatch) {
@@ -686,7 +717,13 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
 // Server
 // ============================================================================
 
-const PORT = parseInt(process.env.PORT ?? "3550", 10);
+const PORT = parseInt(process.env.CAS_API_PORT ?? process.env.PORT ?? "3550", 10);
+
+if (!COGNITO_USER_POOL_ID) {
+  console.error("ERROR: VITE_COGNITO_USER_POOL_ID environment variable is required");
+  console.error("Please set it in your .env file");
+  process.exit(1);
+}
 
 console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -694,15 +731,15 @@ console.log(`
 ╠══════════════════════════════════════════════════════════════╣
 ║  URL: http://localhost:${PORT}                                 ║
 ║                                                              ║
-║  Test User:                                                  ║
-║    Email: test@example.com                                   ║
-║    Password: password123                                     ║
+║  Auth: Cognito                                               ║
+║    User Pool: ${COGNITO_USER_POOL_ID.padEnd(43)}║
+║    Login via cas-webui with your Cognito credentials         ║
 ║                                                              ║
 ║  Endpoints:                                                  ║
-║    POST /auth/login          - Login                         ║
-║    POST /auth/agent-token    - Create agent token            ║
-║    POST /auth/ticket         - Create ticket                 ║
-║    POST /cas/{scope}/resolve - Check node existence          ║
+║    GET  /auth/agent-tokens     - List agent tokens           ║
+║    POST /auth/agent-token      - Create agent token          ║
+║    POST /auth/ticket           - Create ticket               ║
+║    POST /cas/{scope}/resolve   - Check node existence        ║
 ║    PUT  /cas/{scope}/node/:key - Upload node                 ║
 ║    GET  /cas/{scope}/node/:key - Download node               ║
 ╚══════════════════════════════════════════════════════════════╝
