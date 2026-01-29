@@ -1,0 +1,268 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWP CAS Stack - Content-Addressable Storage with global dedup and scope-based access control
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+
+Parameters:
+  CognitoDomain:
+    Type: String
+    Description: Cognito hosted UI domain prefix (must be globally unique)
+    Default: ""
+
+Resources:
+  # ============================================================================
+  # Cognito User Pool
+  # ============================================================================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-users"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-client"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - http://localhost:3500/auth/callback
+        - !Sub "https://${CasApi}.execute-api.${AWS::Region}.amazonaws.com/prod/auth/callback"
+      LogoutURLs:
+        - http://localhost:3500
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Condition: HasCognitoDomain
+    Properties:
+      Domain: !Ref CognitoDomain
+      UserPoolId: !Ref UserPool
+
+  # ============================================================================
+  # DynamoDB Tables
+  # ============================================================================
+  
+  # Tokens table: stores user tokens, agent tokens, and tickets
+  TokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-tokens"
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      GlobalSecondaryIndexes:
+        - IndexName: by-user
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # CAS Ownership table: maps scope -> key for access control
+  CasOwnershipTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-cas-ownership"
+      AttributeDefinitions:
+        - AttributeName: scope
+          AttributeType: S
+        - AttributeName: key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: scope
+          KeyType: HASH
+        - AttributeName: key
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: by-key
+          KeySchema:
+            - AttributeName: key
+              KeyType: HASH
+            - AttributeName: scope
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+
+  # CAS DAG table: stores DAG node metadata and relationships
+  CasDagTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-cas-dag"
+      AttributeDefinitions:
+        - AttributeName: key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: key
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # ============================================================================
+  # S3 Bucket for CAS Storage
+  # ============================================================================
+  CasBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-cas-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOrphanedBlobs
+            Prefix: cas/
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedOrigins: ["*"]
+            MaxAge: 3600
+
+  # ============================================================================
+  # Lambda Function
+  # ============================================================================
+  CasFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-handler"
+      CodeUri: dist/
+      Handler: handler.handler
+      Environment:
+        Variables:
+          TOKENS_TABLE: !Ref TokensTable
+          CAS_OWNERSHIP_TABLE: !Ref CasOwnershipTable
+          CAS_DAG_TABLE: !Ref CasDagTable
+          CAS_BUCKET: !Ref CasBucket
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
+          NODE_OPTIONS: "--enable-source-maps"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TokensTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasOwnershipTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasDagTable
+        - S3CrudPolicy:
+            BucketName: !Ref CasBucket
+      Events:
+        ProxyRoute:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref CasApi
+        RootRoute:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref CasApi
+
+  # ============================================================================
+  # API Gateway
+  # ============================================================================
+  CasApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      BinaryMediaTypes:
+        - "application/octet-stream"
+        - "multipart/form-data"
+        - "*/*"
+
+Conditions:
+  HasCognitoDomain: !Not [!Equals [!Ref CognitoDomain, ""]]
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${CasApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+  
+  CasBucketName:
+    Description: S3 bucket for CAS storage
+    Value: !Ref CasBucket
+  
+  TokensTableName:
+    Description: DynamoDB table for tokens
+    Value: !Ref TokensTable
+  
+  CasOwnershipTableName:
+    Description: DynamoDB table for CAS ownership
+    Value: !Ref CasOwnershipTable
+  
+  CasDagTableName:
+    Description: DynamoDB table for CAS DAG
+    Value: !Ref CasDagTable

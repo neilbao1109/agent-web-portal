@@ -1,0 +1,40 @@
+{
+  "name": "@agent-web-portal/cas-stack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CAS (Content-Addressable Storage) service with global dedup and scope-based access control",
+  "type": "module",
+  "main": "dist/handler.mjs",
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun run server.ts",
+    "dev:sam": "bun run build && sam build && sam local start-api --port 3500",
+    "clean": "rimraf .turbo dist .aws-sam",
+    "build": "bun build src/handler.ts --outdir dist --format esm --target node --external '@aws-sdk/*' && mv dist/handler.js dist/handler.mjs",
+    "sam:build": "bun run build && sam build",
+    "sam:local": "sam local start-api --port 3500",
+    "sam:deploy": "sam deploy",
+    "sam:remove": "sam delete",
+    "deploy": "bun run sam:build && bun run sam:deploy",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.975.0",
+    "@aws-sdk/client-dynamodb": "^3.975.0",
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@aws-sdk/lib-dynamodb": "^3.975.0",
+    "@aws-sdk/s3-request-presigner": "^3.975.0",
+    "busboy": "^1.6.0",
+    "zod": "3"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.147",
+    "@types/bun": "latest",
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^22.10.5"
+  }
+}
