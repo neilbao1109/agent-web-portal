@@ -322,18 +322,18 @@ async function handleRequest(req: Request): Promise<Response> {
 
         const data = await file.arrayBuffer();
 
-        // Use in-memory storage
         const result = USE_S3_STORAGE ? await storeTempUploadS3(data, file.type || "image/png") : storeTempUpload(data, file.type || "image/png");
 
         // Build absolute URLs using the request's Host header
         const host = req.headers.get("host") || `localhost:${PORT}`;
         const protocol = req.headers.get("x-forwarded-proto") || "http";
         const baseUrl = `${protocol}://${host}`;
+        const readUrl = USE_S3_STORAGE ? result.readUrl : `${baseUrl}${result.readUrl}`;
 
         return new Response(
           JSON.stringify({
             ...result,
-            readUrl: `${baseUrl}${result.readUrl}`,
+            readUrl,
           }),
           {
             status: 200,
@@ -354,11 +354,12 @@ async function handleRequest(req: Request): Promise<Response> {
       const host = req.headers.get("host") || `localhost:${PORT}`;
       const protocol = req.headers.get("x-forwarded-proto") || "http";
       const baseUrl = `${protocol}://${host}`;
+      const readUrl = USE_S3_STORAGE ? result.readUrl : `${baseUrl}${result.readUrl}`;
 
       return new Response(
         JSON.stringify({
           ...result,
-          readUrl: `${baseUrl}${result.readUrl}`,
+          readUrl,
         }),
         {
           status: 200,
@@ -409,11 +410,14 @@ async function handleRequest(req: Request): Promise<Response> {
     const host = req.headers.get("host") || `localhost:${PORT}`;
     const protocol = req.headers.get("x-forwarded-proto") || "http";
     const baseUrl = `${protocol}://${host}`;
+    const writeUrl = USE_S3_STORAGE ? result.writeUrl : `${baseUrl}${result.writeUrl}`;
+    const readUrl = USE_S3_STORAGE ? result.readUrl : `${baseUrl}${result.readUrl}`;
+
     return new Response(
       JSON.stringify({
         ...result,
-        writeUrl: `${baseUrl}${result.writeUrl}`,
-        readUrl: `${baseUrl}${result.readUrl}`,
+        writeUrl,
+        readUrl,
       }),
       {
         status: 200,
