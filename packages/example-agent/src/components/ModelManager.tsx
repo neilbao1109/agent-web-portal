@@ -51,7 +51,8 @@ const inputStyle = {
   },
 };
 
-const MODEL_TAGS: { value: ModelTag; label: string; color: "default" | "primary" | "secondary" | "success" | "warning" | "info" }[] = [
+// Preset tags with colors
+const PRESET_TAGS: { value: string; label: string; color: "default" | "primary" | "secondary" | "success" | "warning" | "info" }[] = [
   { value: "reasoning", label: "Reasoning", color: "primary" },
   { value: "vision", label: "Vision", color: "secondary" },
   { value: "fast", label: "Fast", color: "success" },
@@ -59,7 +60,17 @@ const MODEL_TAGS: { value: ModelTag; label: string; color: "default" | "primary"
   { value: "cheap", label: "Cheap", color: "warning" },
 ];
 
-const COMMON_CONTEXT_LENGTHS = [4096, 8192, 16384, 32768, 65536, 128000, 200000];
+// Get color for a tag (preset or default for custom)
+export const getTagColor = (tag: string): "default" | "primary" | "secondary" | "success" | "warning" | "info" => {
+  const preset = PRESET_TAGS.find((t) => t.value === tag);
+  return preset?.color || "default";
+};
+
+// Get label for a tag (preset label or the tag itself for custom)
+export const getTagLabel = (tag: string): string => {
+  const preset = PRESET_TAGS.find((t) => t.value === tag);
+  return preset?.label || tag;
+};
 
 export interface ModelManagerProps {
   endpoints: Endpoint[];
@@ -382,19 +393,16 @@ export function ModelManager({
                           secondary={
                             <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} component="span">
                               <Chip size="small" label={model.type} variant="outlined" />
-                              <Chip size="small" label={`${(model.contextLength / 1000).toFixed(0)}k`} variant="outlined" />
-                              {model.tags.map((tag) => {
-                                const tagInfo = MODEL_TAGS.find((t) => t.value === tag);
-                                return (
-                                  <Chip
-                                    key={tag}
-                                    size="small"
-                                    label={tagInfo?.label || tag}
-                                    color={tagInfo?.color || "default"}
-                                    variant="outlined"
-                                  />
-                                );
-                              })}
+                              <Chip size="small" label={`${(model.contextLength / 1000).toFixed(0)}K`} variant="outlined" />
+                              {model.tags.map((tag) => (
+                                <Chip
+                                  key={tag}
+                                  size="small"
+                                  label={getTagLabel(tag)}
+                                  color={getTagColor(tag)}
+                                  variant="outlined"
+                                />
+                              ))}
                             </Stack>
                           }
                           secondaryTypographyProps={{ component: "div" }}
@@ -525,27 +533,32 @@ export function ModelManager({
               </Select>
             </FormControl>
 
-            <FormControl fullWidth size="small" sx={inputStyle}>
-              <InputLabel>Context Length</InputLabel>
-              <Select
-                value={modelForm.contextLength}
-                label="Context Length"
-                onChange={(e) => setModelForm((prev) => ({ ...prev, contextLength: Number(e.target.value) }))}
-              >
-                {COMMON_CONTEXT_LENGTHS.map((len) => (
-                  <MenuItem key={len} value={len}>
-                    {(len / 1000).toFixed(0)}k tokens
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <TextField
+              label="Context Length (K)"
+              type="number"
+              value={modelForm.contextLength / 1000}
+              onChange={(e) => {
+                const kValue = Number(e.target.value);
+                if (kValue >= 0) {
+                  setModelForm((prev) => ({ ...prev, contextLength: kValue * 1000 }));
+                }
+              }}
+              fullWidth
+              size="small"
+              placeholder="e.g., 128 for 128K"
+              helperText="Context window size in thousands of tokens"
+              sx={inputStyle}
+              InputProps={{
+                endAdornment: <InputAdornment position="end">K tokens</InputAdornment>,
+              }}
+            />
 
             <Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Tags
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {MODEL_TAGS.map((tag) => (
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                {PRESET_TAGS.map((tag) => (
                   <Chip
                     key={tag.value}
                     label={tag.label}
@@ -556,6 +569,37 @@ export function ModelManager({
                   />
                 ))}
               </Stack>
+              {/* Custom tags */}
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                {modelForm.tags
+                  .filter((tag) => !PRESET_TAGS.some((pt) => pt.value === tag))
+                  .map((tag) => (
+                    <Chip
+                      key={tag}
+                      label={tag}
+                      size="small"
+                      onDelete={() => toggleTag(tag)}
+                      sx={{ height: 24 }}
+                    />
+                  ))}
+              </Stack>
+              <TextField
+                size="small"
+                placeholder="Add custom tag and press Enter"
+                fullWidth
+                sx={inputStyle}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const input = e.target as HTMLInputElement;
+                    const value = input.value.trim();
+                    if (value && !modelForm.tags.includes(value)) {
+                      setModelForm((prev) => ({ ...prev, tags: [...prev.tags, value] }));
+                      input.value = "";
+                    }
+                  }
+                }}
+              />
             </Box>
           </Box>
         </DialogContent>

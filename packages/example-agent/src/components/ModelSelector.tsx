@@ -24,15 +24,8 @@ import {
   Check,
   Settings,
 } from "@mui/icons-material";
-import type { ModelWithEndpoint, ModelTag } from "../storage";
-
-const TAG_COLORS: Record<ModelTag, "default" | "primary" | "secondary" | "success" | "warning" | "info"> = {
-  reasoning: "primary",
-  vision: "secondary",
-  fast: "success",
-  "long-context": "info",
-  cheap: "warning",
-};
+import type { ModelWithEndpoint } from "../storage";
+import { getTagColor } from "./ModelManager";
 
 export interface ModelSelectorProps {
   models: ModelWithEndpoint[];
@@ -157,7 +150,7 @@ export function ModelSelector({
                         key={tag}
                         size="small"
                         label={tag}
-                        color={TAG_COLORS[tag]}
+                        color={getTagColor(tag)}
                         variant="outlined"
                         sx={{ height: 20, fontSize: "0.65rem" }}
                       />

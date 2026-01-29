@@ -124,10 +124,13 @@ export function useModelConfig(): UseModelConfigResult {
   // Model operations
   const addModel = useCallback(
     async (model: Omit<Model, "id" | "createdAt" | "updatedAt">) => {
+      const newId = generateId();
       const saved = await modelConfigStorage.saveModel({
         ...model,
-        id: generateId(),
+        id: newId,
       });
+      // Auto-select the newly added model
+      await modelConfigStorage.setSelectedModel(newId);
       await loadData();
       return saved;
     },

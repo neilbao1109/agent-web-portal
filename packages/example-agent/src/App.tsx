@@ -6,7 +6,6 @@ import { useCallback, useRef, useState, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, useMediaQuery } from '@mui/material';
 import {
   Box,
-  Drawer,
   AppBar,
   Toolbar,
   Typography,
@@ -14,7 +13,6 @@ import {
   Tabs,
   Tab,
   Divider,
-  Button,
   Chip,
   SwipeableDrawer,
 } from '@mui/material';
@@ -32,7 +30,6 @@ import {
   ChatPanel,
   ConversationList,
   ModelManager,
-  ModelSelector,
 } from './components';
 import { useModelConfig, useAwpManager, useConversations, useAgent } from './hooks';
 import { StorageContextProvider } from './contexts/StorageContext';
@@ -64,7 +61,6 @@ export function App() {
     models,
     selectedModel,
     adapter,
-    isConfigured,
     addEndpoint: addModelEndpoint,
     updateEndpoint: updateModelEndpoint,
     deleteEndpoint: deleteModelEndpoint,
@@ -267,26 +263,16 @@ export function App() {
               AWP Agent
             </Typography>
 
-            {/* Model selector */}
-            <ModelSelector
-              models={models}
-              selectedModel={selectedModel}
-              onSelectModel={selectModel}
-              onOpenSettings={() => {
-                setRightTab('models');
-                setRightDrawerOpen(true);
-              }}
-              size="small"
-            />
-
-            {endpoints.length > 0 && !isMobile && (
+            {skills.length > 0 && !isMobile && (
               <Chip
-                label={`${endpoints.length} AWP`}
+                icon={<Extension fontSize="small" />}
+                label={`${activeSkillIds.length}/${skills.length} skills`}
                 size="small"
                 variant="outlined"
+                color={activeSkillIds.length > 0 ? 'primary' : 'default'}
                 sx={{ ml: 1, cursor: 'pointer' }}
                 onClick={() => {
-                  setRightTab('endpoints');
+                  setRightTab('skills');
                   setRightDrawerOpen(true);
                 }}
               />
@@ -319,23 +305,25 @@ export function App() {
             {leftDrawerContent}
           </SwipeableDrawer>
         ) : (
-          <Drawer
-            variant="temporary"
-            anchor="left"
-            open={leftDrawerOpen}
-            onClose={() => setLeftDrawerOpen(false)}
-            ModalProps={{
-              keepMounted: true, // Better open performance on desktop
-            }}
+          <Box
             sx={{
-              '& .MuiDrawer-paper': {
-                width: LEFT_DRAWER_WIDTH,
-                boxSizing: 'border-box',
-              },
+              width: leftDrawerOpen ? LEFT_DRAWER_WIDTH : 0,
+              flexShrink: 0,
+              overflow: 'hidden',
+              transition: (theme) =>
+                theme.transitions.create('width', {
+                  easing: theme.transitions.easing.easeOut,
+                  duration: theme.transitions.duration.enteringScreen,
+                }),
+              borderRight: leftDrawerOpen ? 1 : 0,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
             }}
           >
-            {leftDrawerContent}
-          </Drawer>
+            <Box sx={{ width: LEFT_DRAWER_WIDTH }}>
+              {leftDrawerContent}
+            </Box>
+          </Box>
         )}
 
         {/* Main Content */}
@@ -347,58 +335,26 @@ export function App() {
             flexDirection: 'column',
             overflow: 'hidden',
             minWidth: 0, // Prevent flex item from overflowing
-            transition: (theme) =>
-              theme.transitions.create(['margin'], {
-                easing: theme.transitions.easing.sharp,
-                duration: theme.transitions.duration.leavingScreen,
-              }),
           }}
         >
           <Toolbar />
 
-          {/* Not configured state */}
-          {!isConfigured && (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                p: { xs: 2, sm: 4 },
-              }}
-            >
-              <Settings sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-                Configure a Model
-              </Typography>
-              <Typography color="text.secondary" sx={{ mb: 3, textAlign: 'center', px: 2 }}>
-                Add an endpoint and model to start using the agent.
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                onClick={() => {
-                  setRightTab('models');
-                  setRightDrawerOpen(true);
-                }}
-              >
-                Add Model
-              </Button>
-            </Box>
-          )}
-
-          {/* Chat state */}
-          {isConfigured && (
-            <ChatPanel
-              messages={messages}
-              streamingMessage={streamingMessage}
-              state={state}
-              error={error}
-              onSendMessage={sendMessage}
-              onStop={stop}
-            />
-          )}
+          {/* Chat panel - always visible */}
+          <ChatPanel
+            messages={messages}
+            streamingMessage={streamingMessage}
+            state={state}
+            error={error}
+            onSendMessage={sendMessage}
+            onStop={stop}
+            models={models}
+            selectedModel={selectedModel}
+            onSelectModel={selectModel}
+            onOpenModelSettings={() => {
+              setRightTab('models');
+              setRightDrawerOpen(true);
+            }}
+          />
         </Box>
 
         {/* Right Drawer - Skills & Endpoints */}
@@ -419,23 +375,25 @@ export function App() {
             {rightDrawerContent}
           </SwipeableDrawer>
         ) : (
-          <Drawer
-            variant="temporary"
-            anchor="right"
-            open={rightDrawerOpen}
-            onClose={() => setRightDrawerOpen(false)}
-            ModalProps={{
-              keepMounted: true,
-            }}
+          <Box
             sx={{
-              '& .MuiDrawer-paper': {
-                width: RIGHT_DRAWER_WIDTH,
-                boxSizing: 'border-box',
-              },
+              width: rightDrawerOpen ? RIGHT_DRAWER_WIDTH : 0,
+              flexShrink: 0,
+              overflow: 'hidden',
+              transition: (theme) =>
+                theme.transitions.create('width', {
+                  easing: theme.transitions.easing.easeOut,
+                  duration: theme.transitions.duration.enteringScreen,
+                }),
+              borderLeft: rightDrawerOpen ? 1 : 0,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
             }}
           >
-            {rightDrawerContent}
-          </Drawer>
+            <Box sx={{ width: RIGHT_DRAWER_WIDTH }}>
+              {rightDrawerContent}
+            </Box>
+          </Box>
         )}
 
       </Box>

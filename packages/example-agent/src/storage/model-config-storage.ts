@@ -13,8 +13,9 @@ export type ModelType = "openai" | "anthropic";
 
 /**
  * Model tags for categorization
+ * Can be any string for custom tags
  */
-export type ModelTag = "reasoning" | "vision" | "fast" | "long-context" | "cheap";
+export type ModelTag = string;
 
 /**
  * Endpoint configuration

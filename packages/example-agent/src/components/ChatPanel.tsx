@@ -9,7 +9,6 @@ import {
   Box,
   TextField,
   IconButton,
-  Paper,
   Typography,
   CircularProgress,
   Chip,
@@ -18,11 +17,26 @@ import {
   FormControlLabel,
   useMediaQuery,
   useTheme,
+  keyframes,
 } from '@mui/material';
 import { Send, Stop, ExpandMore, ExpandLess, Build, Code } from '@mui/icons-material';
-import type { Message } from '../storage';
+
+// Rainbow gradient animation for processing state
+const rainbowMove = keyframes`
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+`;
+import type { Message, ModelWithEndpoint } from '../storage';
 import type { AgentState, StreamingMessage } from '../hooks/useAgent';
 import { BlobMarkdown } from './BlobMarkdown';
+import { ModelSelector } from './ModelSelector';
 import { useStorage } from '../contexts/StorageContext';
 
 export interface ChatPanelProps {
@@ -32,6 +46,11 @@ export interface ChatPanelProps {
   error: string | null;
   onSendMessage: (content: string) => Promise<void>;
   onStop: () => void;
+  // Model selector props
+  models: ModelWithEndpoint[];
+  selectedModel: ModelWithEndpoint | null;
+  onSelectModel: (modelId: string) => Promise<void>;
+  onOpenModelSettings?: () => void;
 }
 
 export function ChatPanel({
@@ -41,6 +60,10 @@ export function ChatPanel({
   error,
   onSendMessage,
   onStop,
+  models,
+  selectedModel,
+  onSelectModel,
+  onOpenModelSettings,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -56,7 +79,7 @@ export function ChatPanel({
 
   const handleSend = async () => {
     const content = input.trim();
-    if (!content || state !== 'idle') return;
+    if (!content || state !== 'idle' || !hasModel) return;
 
     setInput('');
     await onSendMessage(content);
@@ -73,6 +96,8 @@ export function ChatPanel({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isProcessing = state !== 'idle' && state !== 'error';
+  const hasModel = selectedModel !== null;
+  const canSend = hasModel && input.trim() && !isProcessing;
 
   return (
     <Box sx={{ 
@@ -81,30 +106,15 @@ export function ChatPanel({
       flex: 1,
       minHeight: 0, // Critical for flex child to respect overflow
       overflow: 'hidden',
-      bgcolor: 'grey.100', // Background for the sides
+      bgcolor: 'background.paper',
     }}>
       {/* Messages - scrollable area */}
       <Box sx={{ 
         flex: 1, 
         overflow: 'auto', 
         minHeight: 0,
-        px: { xs: 0, sm: 2 }, // Padding for scroll area to align with input
+        p: { xs: 1, sm: 2 },
       }}>
-        {/* Centered container */}
-        <Box sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          minHeight: '100%', // At least fill the viewport
-        }}>
-          {/* Paper - grows with content */}
-          <Box sx={{
-            width: '100%',
-            maxWidth: 900,
-            bgcolor: 'background.paper',
-            p: { xs: 1, sm: 2 },
-            boxShadow: { xs: 0, sm: 1 },
-            minHeight: '100%', // At least fill the container
-          }}>
             {messages.length === 0 && !streamingMessage && (
               <Box
                 sx={{
@@ -116,7 +126,9 @@ export function ChatPanel({
                 }}
               >
                 <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
-                  Start a conversation or load a skill to begin.
+                  {hasModel 
+                    ? 'Start a conversation or load a skill to begin.'
+                    : 'Select a model to start chatting.'}
                 </Typography>
               </Box>
             )}
@@ -132,38 +144,53 @@ export function ChatPanel({
 
             {/* Error */}
             {error && (
-              <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
+              <Box sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2, borderRadius: 1 }}>
                 <Typography variant="body2">{error}</Typography>
-              </Paper>
+              </Box>
             )}
 
-            <div ref={messagesEndRef} />
-          </Box>
-        </Box>
+        <div ref={messagesEndRef} />
       </Box>
 
       {/* Input */}
       <Box sx={{ 
-        bgcolor: 'grey.100',
-        display: 'flex',
-        justifyContent: 'center',
         borderTop: 1, 
         borderColor: 'divider',
         flexShrink: 0,
-        px: { xs: 0, sm: 2 }, // Match scroll area padding
+        p: { xs: 1.5, sm: 2 },
+        position: 'relative',
+        bgcolor: 'background.paper',
       }}>
-        <Paper 
-          sx={{ 
-            p: { xs: 1.5, sm: 2 }, 
-            width: '100%',
-            maxWidth: 900,
-            borderRadius: 0,
-            boxShadow: { xs: 0, sm: 1 },
-            // Safe area for mobile devices with home indicator
-            pb: { xs: 'max(env(safe-area-inset-bottom), 12px)', sm: 2 },
-        }} 
-        elevation={0}
-      >
+        {/* Rainbow gradient overlay when processing */}
+        {isProcessing && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(90deg, rgba(255,0,0,0.1), rgba(255,165,0,0.1), rgba(255,255,0,0.1), rgba(0,128,0,0.1), rgba(0,0,255,0.1), rgba(75,0,130,0.1), rgba(238,130,238,0.1), rgba(255,0,0,0.1))',
+              backgroundSize: '200% 100%',
+              animation: `${rainbowMove} 3s ease infinite`,
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
+        )}
+        {/* Model selector - above input, left aligned */}
+        <Box sx={{ mb: 1 }}>
+          <ModelSelector
+            models={models}
+            selectedModel={selectedModel}
+            onSelectModel={onSelectModel}
+            onOpenSettings={onOpenModelSettings}
+            size="small"
+            disabled={isProcessing}
+          />
+        </Box>
+        
+        {/* Input row */}
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
           <TextField
             inputRef={inputRef}
@@ -179,6 +206,7 @@ export function ChatPanel({
             sx={{
               '& .MuiInputBase-root': {
                 fontSize: { xs: '16px', sm: 'inherit' }, // Prevent zoom on iOS
+                bgcolor: 'background.paper',
               },
             }}
           />
@@ -190,50 +218,22 @@ export function ChatPanel({
             <IconButton 
               onClick={handleSend} 
               color="primary" 
-              disabled={!input.trim()}
+              disabled={!canSend}
               size={isMobile ? 'medium' : 'large'}
             >
               <Send />
             </IconButton>
           )}
         </Box>
-        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          {state === 'streaming' && (
-            <Chip
-              size="small"
-              icon={<CircularProgress size={12} />}
-              label={isMobile ? "..." : "Generating..."}
-              variant="outlined"
-            />
-          )}
-          {state === 'calling_tool' && (
-            <Chip
-              size="small"
-              icon={<CircularProgress size={12} />}
-              label={isMobile ? "Tool..." : "Calling tool..."}
-              variant="outlined"
-              color="secondary"
-            />
-          )}
-          {state === 'thinking' && (
-            <Chip
-              size="small"
-              icon={<CircularProgress size={12} />}
-              label={isMobile ? "..." : "Thinking..."}
-              variant="outlined"
-            />
-          )}
-        </Box>
-      </Paper>
       </Box>
     </Box>
   );
 }
 
 /**
- * Message Bubble Component
+ * Message Component
  */
-function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boolean }) {
+function MessageBubble({ message }: { message: Message; isMobile?: boolean }) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const storage = useStorage();
@@ -242,7 +242,7 @@ function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boo
   const isAssistant = message.role === 'assistant';
   const isTool = message.role === 'tool';
 
-  // Don't show tool messages as bubbles, they're shown inline with the tool call
+  // Don't show tool messages, they're shown inline with the tool call
   if (isTool) {
     return null;
   }
@@ -250,205 +250,209 @@ function MessageBubble({ message, isMobile }: { message: Message; isMobile?: boo
   return (
     <Box
       sx={{
-        mb: { xs: 1.5, sm: 2 },
-        display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
-        minWidth: 0, // Prevent flex item from overflowing
+        mb: 2,
+        pb: 2,
+        borderBottom: 1,
+        borderColor: 'divider',
       }}
     >
-      <Paper
-        sx={{
-          p: { xs: 1.5, sm: 2 },
-          maxWidth: isMobile ? '90%' : '80%',
-          minWidth: 0, // Allow shrinking
-          overflow: 'hidden', // Prevent content overflow
-          bgcolor: isUser ? 'primary.main' : 'grey.100',
-          color: isUser ? 'primary.contrastText' : 'text.primary',
-          borderRadius: 2,
+      {/* Role label */}
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          fontWeight: 'bold',
+          color: isUser ? 'primary.main' : 'text.secondary',
+          mb: 0.5,
+          display: 'block',
         }}
       >
-        {/* Raw/Markdown Toggle for assistant messages */}
-        {isAssistant && message.content && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={showRaw}
-                  onChange={(e) => setShowRaw(e.target.checked)}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Code fontSize="small" />
-                  <Typography variant="caption">Raw</Typography>
-                </Box>
-              }
-              sx={{ m: 0 }}
-            />
-          </Box>
-        )}
+        {isUser ? 'You' : 'Assistant'}
+      </Typography>
 
-        {/* Content */}
-        {message.content && (
-          showRaw ? (
-            <Box
-              component="pre"
-              sx={{
-                m: 0,
-                p: 1,
-                bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                borderRadius: 1,
-                fontSize: '0.8rem',
-                overflow: 'auto',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                fontFamily: 'monospace',
-              }}
-            >
-              {message.content}
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                '& > *:first-of-type': { mt: 0 },
-                '& > *:last-child': { mb: 0 },
-                overflow: 'hidden', // Prevent content overflow
-                wordBreak: 'break-word', // Break long words
-                '& code': {
-                  bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                  px: 0.5,
-                  borderRadius: 0.5,
-                  fontFamily: 'monospace',
-                  wordBreak: 'break-all', // Break long code
-                },
-                '& pre': {
-                  bgcolor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                  p: 1,
-                  borderRadius: 1,
-                  overflow: 'auto',
-                  maxWidth: '100%',
-                },
-                '& img': {
-                  maxWidth: '100%',
-                  borderRadius: 1,
-                  mt: 1,
-                },
-                '& table': {
-                  maxWidth: '100%',
-                  overflow: 'auto',
-                  display: 'block',
-                },
-              }}
-            >
-              <BlobMarkdown storage={storage ?? undefined}>{message.content}</BlobMarkdown>
-            </Box>
-          )
-        )}
-
-        {/* Tool calls */}
-        {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (
-          <Box sx={{ mt: message.content ? 1 : 0 }}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setToolExpanded(!toolExpanded)}
-            >
-              <Build fontSize="small" sx={{ mr: 0.5 }} />
-              <Typography variant="caption">
-                {message.toolCalls.length} tool call{message.toolCalls.length > 1 ? 's' : ''}
-              </Typography>
-              {toolExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-            </Box>
-
-            <Collapse in={toolExpanded}>
-              <Box sx={{ mt: 1 }}>
-                {message.toolCalls.map((tc) => (
-                  <Paper
-                    key={tc.id}
-                    sx={{
-                      p: 1,
-                      mb: 1,
-                      bgcolor: 'background.paper',
-                      border: 1,
-                      borderColor: 'divider',
-                    }}
-                    variant="outlined"
-                  >
-                    <Typography variant="caption" fontWeight="medium" color="text.primary">
-                      {tc.name}
-                    </Typography>
-                    <Box
-                      component="pre"
-                      sx={{
-                        mt: 0.5,
-                        mb: 0,
-                        p: 1,
-                        bgcolor: 'grey.50',
-                        borderRadius: 1,
-                        fontSize: '0.75rem',
-                        overflow: 'auto',
-                        color: 'text.primary',
-                      }}
-                    >
-                      {JSON.stringify(tc.arguments, null, 2)}
-                    </Box>
-                  </Paper>
-                ))}
+      {/* Raw/Markdown Toggle for assistant messages */}
+      {isAssistant && message.content && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={showRaw}
+                onChange={(e) => setShowRaw(e.target.checked)}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Code fontSize="small" />
+                <Typography variant="caption">Raw</Typography>
               </Box>
-            </Collapse>
+            }
+            sx={{ m: 0 }}
+          />
+        </Box>
+      )}
+
+      {/* Content */}
+      {message.content && (
+        showRaw ? (
+          <Box
+            component="pre"
+            sx={{
+              m: 0,
+              p: 1,
+              bgcolor: 'grey.100',
+              borderRadius: 1,
+              fontSize: '0.8rem',
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontFamily: 'monospace',
+            }}
+          >
+            {message.content}
           </Box>
-        )}
-      </Paper>
+        ) : (
+          <Box
+            sx={{
+              '& > *:first-of-type': { mt: 0 },
+              '& > *:last-child': { mb: 0 },
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+              '& code': {
+                bgcolor: 'grey.100',
+                px: 0.5,
+                borderRadius: 0.5,
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+              },
+              '& pre': {
+                bgcolor: 'grey.100',
+                p: 1,
+                borderRadius: 1,
+                overflow: 'auto',
+                maxWidth: '100%',
+              },
+              '& img': {
+                maxWidth: '100%',
+                borderRadius: 1,
+                mt: 1,
+              },
+              '& table': {
+                maxWidth: '100%',
+                overflow: 'auto',
+                display: 'block',
+              },
+            }}
+          >
+            <BlobMarkdown storage={storage ?? undefined}>{message.content}</BlobMarkdown>
+          </Box>
+        )
+      )}
+
+      {/* Tool calls */}
+      {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (
+        <Box sx={{ mt: message.content ? 1 : 0 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+            }}
+            onClick={() => setToolExpanded(!toolExpanded)}
+          >
+            <Build fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
+            <Typography variant="caption" color="text.secondary">
+              {message.toolCalls.length} tool call{message.toolCalls.length > 1 ? 's' : ''}
+            </Typography>
+            {toolExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+          </Box>
+
+          <Collapse in={toolExpanded}>
+            <Box sx={{ mt: 1 }}>
+              {message.toolCalls.map((tc) => (
+                <Box
+                  key={tc.id}
+                  sx={{
+                    p: 1,
+                    mb: 1,
+                    bgcolor: 'grey.50',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="caption" fontWeight="medium">
+                    {tc.name}
+                  </Typography>
+                  <Box
+                    component="pre"
+                    sx={{
+                      mt: 0.5,
+                      mb: 0,
+                      p: 1,
+                      bgcolor: 'grey.100',
+                      borderRadius: 1,
+                      fontSize: '0.75rem',
+                      overflow: 'auto',
+                    }}
+                  >
+                    {JSON.stringify(tc.arguments, null, 2)}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Collapse>
+        </Box>
+      )}
     </Box>
   );
 }
 /**
- * Streaming Message Bubble Component
+ * Streaming Message Component
  */
-function StreamingMessageBubble({ streamingMessage, isMobile }: { streamingMessage: StreamingMessage; isMobile?: boolean }) {
+function StreamingMessageBubble({ streamingMessage }: { streamingMessage: StreamingMessage; isMobile?: boolean }) {
   const storage = useStorage();
 
   return (
-    <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
-      <Paper
-        sx={{
-          p: { xs: 1.5, sm: 2 },
-          maxWidth: isMobile ? '90%' : '80%',
-          bgcolor: 'grey.100',
-          borderRadius: 2,
+    <Box sx={{ mb: 2 }}>
+      {/* Role label */}
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          fontWeight: 'bold',
+          color: 'text.secondary',
+          mb: 0.5,
+          display: 'block',
         }}
       >
-        {streamingMessage.content && (
-          <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-child': { mb: 0 } }}>
-            <BlobMarkdown storage={storage ?? undefined}>
-              {streamingMessage.content}
-            </BlobMarkdown>
-          </Box>
-        )}
+        Assistant
+      </Typography>
 
-        {streamingMessage.toolCalls.length > 0 && (
-          <Box sx={{ mt: 1 }}>
-            {streamingMessage.toolCalls.map((tc) => (
-              <Chip
-                key={tc.id}
-                icon={tc.isComplete ? <Build /> : <CircularProgress size={14} />}
-                label={tc.name}
-                size="small"
-                variant="outlined"
-                sx={{ mr: 0.5, mb: 0.5 }}
-              />
-            ))}
-          </Box>
-        )}
+      {streamingMessage.content && (
+        <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-child': { mb: 0 } }}>
+          <BlobMarkdown storage={storage ?? undefined}>
+            {streamingMessage.content}
+          </BlobMarkdown>
+        </Box>
+      )}
 
-        {!streamingMessage.content && streamingMessage.toolCalls.length === 0 && (
-          <CircularProgress size={20} />
-        )}
-      </Paper>
+      {streamingMessage.toolCalls.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          {streamingMessage.toolCalls.map((tc) => (
+            <Chip
+              key={tc.id}
+              icon={tc.isComplete ? <Build /> : <CircularProgress size={14} />}
+              label={tc.name}
+              size="small"
+              variant="outlined"
+              sx={{ mr: 0.5, mb: 0.5 }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {!streamingMessage.content && streamingMessage.toolCalls.length === 0 && (
+        <Typography variant="body2" color="text.secondary">...</Typography>
+      )}
     </Box>
   );
 }
