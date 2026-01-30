@@ -1,4 +1,4 @@
-# @anthropic/cas-client-nodejs
+# @agent-web-portal/cas-client-nodejs
 
 Node.js client for Content-Addressable Storage (CAS) with filesystem-based caching.
 
@@ -14,7 +14,7 @@ Node.js client for Content-Addressable Storage (CAS) with filesystem-based cachi
 ## Installation
 
 ```bash
-npm install @anthropic/cas-client-nodejs
+npm install @agent-web-portal/cas-client-nodejs
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ npm install @anthropic/cas-client-nodejs
 ### Basic Usage
 
 ```typescript
-import { CasClient } from "@anthropic/cas-client-nodejs";
+import { CasClient } from "@agent-web-portal/cas-client-nodejs";
 
 // Create client with user token
 const cas = CasClient.fromUserToken("https://cas.example.com", "user_token");
@@ -53,7 +53,7 @@ const key = await cas.putFile(bytes, "image/png");
 ### With Local Cache
 
 ```typescript
-import { CasClient, FileSystemStorageProvider } from "@anthropic/cas-client-nodejs";
+import { CasClient, FileSystemStorageProvider } from "@agent-web-portal/cas-client-nodejs";
 
 const storage = new FileSystemStorageProvider("/tmp/cas-cache");
 const cas = CasClient.fromContext(context.cas, storage);

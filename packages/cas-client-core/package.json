@@ -1,27 +1,29 @@
 {
-  "name": "@anthropic/cas-client-core",
+  "name": "@agent-web-portal/cas-client-core",
   "version": "0.0.1",
   "description": "CAS client core - platform-agnostic types and utilities",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
+    "clean": "rimraf .turbo dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
   },
   "devDependencies": {
     "typescript": "^5.3.0"
   },
   "files": [
-    "dist"
+    "src",
+    "README.md"
   ],
   "license": "MIT"
 }

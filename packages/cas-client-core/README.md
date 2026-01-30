@@ -1,4 +1,4 @@
-# @anthropic/cas-client-core
+# @agent-web-portal/cas-client-core
 
 Platform-agnostic core types and utilities for CAS (Content-Addressable Storage) clients.
 
@@ -14,7 +14,7 @@ This package provides:
 ## Installation
 
 ```bash
-npm install @anthropic/cas-client-core
+npm install @agent-web-portal/cas-client-core
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ npm install @anthropic/cas-client-core
 ### Blob References
 
 ```typescript
-import { createBlobRef, parseBlobRef, resolvePath } from "@anthropic/cas-client-core";
+import { createBlobRef, parseBlobRef, resolvePath } from "@agent-web-portal/cas-client-core";
 
 // Create a blob reference
 const ref = createBlobRef(
@@ -43,5 +43,5 @@ const { baseUrl, shard, ticketId } = parseEndpoint(ref["#cas-endpoint"]);
 
 ## Platform-specific Packages
 
-- `@anthropic/cas-client-nodejs` - Node.js implementation with fs-based caching
-- `@anthropic/cas-client-browser` - Browser implementation with IndexedDB caching
+- `@agent-web-portal/cas-client-nodejs` - Node.js implementation with fs-based caching
+- `@agent-web-portal/cas-client-browser` - Browser implementation with IndexedDB caching

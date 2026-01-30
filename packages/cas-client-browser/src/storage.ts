@@ -4,7 +4,7 @@
  * Local caching implementation using IndexedDB
  */
 
-import type { ByteStream, CasRawNode, LocalStorageProvider } from "@anthropic/cas-client-core";
+import type { ByteStream, CasRawNode, LocalStorageProvider } from "@agent-web-portal/cas-client-core";
 
 const DB_VERSION = 1;
 const META_STORE = "meta";

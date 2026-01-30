@@ -4,7 +4,7 @@
  * Conversion utilities between Web ReadableStream and platform-agnostic ByteStream
  */
 
-import type { ByteStream } from "@anthropic/cas-client-core";
+import type { ByteStream } from "@agent-web-portal/cas-client-core";
 
 /**
  * Convert ByteStream (AsyncIterable<Uint8Array>) to Web ReadableStream

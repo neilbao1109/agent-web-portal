@@ -1,4 +1,4 @@
-# @anthropic/cas-client-browser
+# @agent-web-portal/cas-client-browser
 
 Browser client for Content-Addressable Storage (CAS) with IndexedDB-based caching.
 
@@ -13,7 +13,7 @@ Browser client for Content-Addressable Storage (CAS) with IndexedDB-based cachin
 ## Installation
 
 ```bash
-npm install @anthropic/cas-client-browser
+npm install @agent-web-portal/cas-client-browser
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ npm install @anthropic/cas-client-browser
 ### Basic Usage
 
 ```typescript
-import { CasClient } from "@anthropic/cas-client-browser";
+import { CasClient } from "@agent-web-portal/cas-client-browser";
 
 // Create client with user token
 const cas = CasClient.fromUserToken("https://cas.example.com", "user_token");
@@ -49,7 +49,7 @@ const key = await cas.putFile(bytes, "image/png");
 ### With IndexedDB Cache
 
 ```typescript
-import { CasClient, IndexedDBStorageProvider } from "@anthropic/cas-client-browser";
+import { CasClient, IndexedDBStorageProvider } from "@agent-web-portal/cas-client-browser";
 
 // Create storage provider (uses IndexedDB)
 const storage = new IndexedDBStorageProvider("my-cas-cache");
@@ -65,7 +65,7 @@ const cas = CasClient.fromUserToken(
 ### Stream Conversion
 
 ```typescript
-import { byteStreamToReadableStream, readableStreamToByteStream } from "@anthropic/cas-client-browser";
+import { byteStreamToReadableStream, readableStreamToByteStream } from "@agent-web-portal/cas-client-browser";
 
 // Convert ByteStream to Web ReadableStream
 const stream = await handle.stream();
@@ -81,5 +81,5 @@ const byteStream = readableStreamToByteStream(webStream);
 
 ## Related Packages
 
-- `@anthropic/cas-client-core` - Platform-agnostic types and utilities
-- `@anthropic/cas-client-nodejs` - Node.js implementation with filesystem caching
+- `@agent-web-portal/cas-client-core` - Platform-agnostic types and utilities
+- `@agent-web-portal/cas-client-nodejs` - Node.js implementation with filesystem caching

@@ -6,7 +6,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ByteStream, CasRawNode, LocalStorageProvider } from "@anthropic/cas-client-core";
+import type { ByteStream, CasRawNode, LocalStorageProvider } from "@agent-web-portal/cas-client-core";
 
 /**
  * File system based local storage provider for caching CAS nodes

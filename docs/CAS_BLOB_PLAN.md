@@ -699,7 +699,7 @@ User -> AWP Client -> (auto inject #cas-endpoint) -> Tool
 ### Tool 实现示例
 
 ```typescript
-import { CasClient } from '@anthropic/cas-client';
+import { CasClient } from '@agent-web-portal/cas-client-nodejs';
 
 interface ImageProcessInput {
   "#cas-endpoint"?: string;

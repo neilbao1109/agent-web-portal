@@ -5,7 +5,7 @@
  */
 
 import { Readable } from "node:stream";
-import type { ByteStream } from "@anthropic/cas-client-core";
+import type { ByteStream } from "@agent-web-portal/cas-client-core";
 
 /**
  * Convert a Node.js Readable stream to ByteStream (AsyncIterable<Uint8Array>)

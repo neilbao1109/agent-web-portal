@@ -8,11 +8,11 @@
  * - FileSystemStorageProvider for local caching
  * - Stream conversion utilities between Node.js Readable and ByteStream
  *
- * For platform-agnostic code, use @anthropic/cas-client-core directly.
+ * For platform-agnostic code, use @agent-web-portal/cas-client-core directly.
  */
 
 // Re-export everything from core
-export * from "@anthropic/cas-client-core";
+export * from "@agent-web-portal/cas-client-core";
 
 // Node.js-specific exports
 export { FileSystemStorageProvider } from "./src/storage.ts";
