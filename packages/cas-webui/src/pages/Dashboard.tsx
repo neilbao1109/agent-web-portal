@@ -17,7 +17,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 interface DashboardStats {
   agentTokenCount: number;
-  nodeCount: number;
+  nodeCount: number | string;
   totalSize: number;
 }
 
@@ -87,7 +87,7 @@ export default function Dashboard() {
       }
 
       // Fetch agent tokens count
-      const tokensResponse = await fetch("/api/auth/agent-tokens", {
+      const tokensResponse = await fetch("/api/auth/tokens", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -99,12 +99,33 @@ export default function Dashboard() {
         agentTokenCount = tokensData.tokens?.length || 0;
       }
 
-      // For now, set placeholder values for node stats
-      // These would come from a real API endpoint
+      // Fetch nodes stats - get first page to count
+      const nodesResponse = await fetch("/api/cas/~/nodes?limit=100", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let nodeCount: number | string = 0;
+      let totalSize = 0;
+      if (nodesResponse.ok) {
+        const nodesData = await nodesResponse.json();
+        const nodes = nodesData.nodes || [];
+        nodeCount = nodes.length;
+        totalSize = nodes.reduce(
+          (sum: number, node: { size?: number }) => sum + (node.size || 0),
+          0
+        );
+        // Note: This is an approximation - only counts first 100 nodes
+        if (nodesData.nextKey) {
+          nodeCount = `${nodeCount}+`; // Indicate there are more
+        }
+      }
+
       setStats({
         agentTokenCount,
-        nodeCount: 0, // Will be fetched from actual API
-        totalSize: 0, // Will be fetched from actual API
+        nodeCount,
+        totalSize,
       });
     } catch (err) {
       console.error("Failed to fetch stats:", err);

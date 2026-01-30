@@ -7,25 +7,32 @@
 
 ### 阶段一：更新 cas-stack 后端
 
-- [ ] 更新类型定义：scope → shard 重命名，Ticket 新字段
-- [ ] 实现 CAS 三级节点结构（collection/file/chunk）
-- [ ] 更新数据库层支持新 Ticket 结构
-- [ ] 更新认证中间件
-- [ ] 更新 API 端点（路径 scope → shard）
-- [ ] 新增配置查询 API
+- [x] 更新类型定义：scope → shard 重命名，Ticket 新字段
+- [x] 实现 CAS 三级节点结构（collection/file/chunk）
+- [x] 更新数据库层支持新 Ticket 结构
+- [x] 更新认证中间件
+- [x] 更新 API 端点（路径 scope → shard）
+- [x] 新增配置查询 API
+- [x] 添加 Agent Token 管理 API（POST/GET/DELETE /auth/tokens）
+- [x] 添加 maxTicketTtl / maxAgentTokenTtl 配置
+- [x] Ticket 响应添加 endpoint 字段
+- [x] 添加 CAS MCP 端点（/mcp 路由）
 
 ### 阶段二：创建 cas-client 包
 
-- [ ] 创建包结构（package.json, tsconfig.json）
-- [ ] 实现 CasClient（三种鉴权模式）
-- [ ] 实现 Client 端分片逻辑
-- [ ] 实现 CasFileHandle（流式读取）
-- [ ] 实现 LocalStorageProvider（本地缓存）
+- [x] 创建 cas-client-core 包（平台无关的类型和工具）
+- [x] 重构 cas-client 为 cas-client-nodejs
+- [x] 创建 cas-client-browser 包（IndexedDB 缓存）
+- [x] 实现 CasClient（fromEndpoint 工厂方法）
+- [x] 实现 CasBlobRef 和 blob-ref 工具函数
+- [x] 实现 ByteStream 流式处理
+- [x] 实现 LocalStorageProvider 接口
 
 ### 阶段三：更新 cas-webui
 
-- [ ] 更新 API 调用路径
-- [ ] 更新 Ticket 创建表单
+- [x] 添加 Agent Tokens 管理页面
+- [x] 更新 Dashboard 显示 Agent Token 和 Node 统计
+- [ ] 更新 Ticket 创建表单（添加 endpoint 显示）
 
 ---
 
