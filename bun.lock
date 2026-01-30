@@ -80,6 +80,29 @@
         "typescript": "^5.3.0",
       },
     },
+    "packages/awp-server-core": {
+      "name": "@agent-web-portal/awp-server-core",
+      "version": "0.0.1",
+      "dependencies": {
+        "@agent-web-portal/cas-client-core": "workspace:*",
+        "zod": "^3.23.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.3.0",
+      },
+    },
+    "packages/awp-server-lambda": {
+      "name": "@agent-web-portal/awp-server-lambda",
+      "version": "0.0.1",
+      "dependencies": {
+        "@agent-web-portal/awp-server-core": "workspace:*",
+        "@agent-web-portal/cas-client-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/aws-lambda": "^8.10.145",
+        "typescript": "^5.3.0",
+      },
+    },
     "packages/aws-cli": {
       "name": "@agent-web-portal/aws-cli",
       "version": "0.2.0",
@@ -389,6 +412,10 @@
     "@agent-web-portal/awp-client-core": ["@agent-web-portal/awp-client-core@workspace:packages/awp-client-core"],
 
     "@agent-web-portal/awp-client-nodejs": ["@agent-web-portal/awp-client-nodejs@workspace:packages/awp-client-nodejs"],
+
+    "@agent-web-portal/awp-server-core": ["@agent-web-portal/awp-server-core@workspace:packages/awp-server-core"],
+
+    "@agent-web-portal/awp-server-lambda": ["@agent-web-portal/awp-server-lambda@workspace:packages/awp-server-lambda"],
 
     "@agent-web-portal/aws-cli": ["@agent-web-portal/aws-cli@workspace:packages/aws-cli"],
 
