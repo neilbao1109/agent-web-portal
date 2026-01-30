@@ -264,7 +264,7 @@ export default function Nodes() {
 
       // Compute hash for the key
       const hash = await computeHash(content);
-      const key = `sha256-${hash}`;
+      const key = `sha256:${hash}`;
       setUploadProgress(50);
 
       // Upload to CAS
