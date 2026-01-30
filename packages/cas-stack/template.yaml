@@ -431,6 +431,7 @@ Resources:
             CachedMethods: [GET, HEAD]
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
+            ResponseHeadersPolicyId: !Ref CorsResponseHeadersPolicy
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 200
@@ -439,6 +440,33 @@ Resources:
             ResponseCode: 200
             ResponsePagePath: /index.html
         PriceClass: PriceClass_100
+
+  CorsResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${AWS::StackName}-cors-policy"
+        CorsConfig:
+          AccessControlAllowCredentials: false
+          AccessControlAllowHeaders:
+            Items:
+              - Content-Type
+              - Authorization
+              - X-AWP-Pubkey
+              - X-AWP-Timestamp
+              - X-AWP-Signature
+          AccessControlAllowMethods:
+            Items:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+          AccessControlAllowOrigins:
+            Items:
+              - "*"
+          AccessControlMaxAgeSec: 86400
+          OriginOverride: true
 
   CloudFrontOAC:
     Type: AWS::CloudFront::OriginAccessControl
