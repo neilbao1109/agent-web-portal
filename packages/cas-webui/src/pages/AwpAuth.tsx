@@ -308,7 +308,7 @@ export default function AwpAuth() {
           <TextField
             fullWidth
             label="Verification Code"
-            placeholder="XXXX-XXXX"
+            placeholder="XXX-XXX"
             value={enteredCode}
             onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
             sx={{ mb: 3 }}
