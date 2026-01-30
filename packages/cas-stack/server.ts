@@ -57,7 +57,7 @@ class MemoryTokensDb {
   }
 
   async createTicket(
-    shard: string,
+    realm: string,
     issuerId: string,
     scope: string | string[],
     writable?: boolean | { quota?: number; accept?: string[] },
@@ -68,7 +68,7 @@ class MemoryTokensDb {
     const ticket: Ticket = {
       pk: `token#${ticketId}`,
       type: "ticket",
-      shard,
+      realm,
       issuerId,
       scope,
       writable,
@@ -110,26 +110,26 @@ class MemoryTokensDb {
 class MemoryOwnershipDb {
   private ownership = new Map<string, CasOwnership>();
 
-  private key(shard: string, casKey: string): string {
-    return `${shard}#${casKey}`;
+  private key(realm: string, casKey: string): string {
+    return `${realm}#${casKey}`;
   }
 
-  async hasOwnership(shard: string, casKey: string): Promise<boolean> {
-    return this.ownership.has(this.key(shard, casKey));
+  async hasOwnership(realm: string, casKey: string): Promise<boolean> {
+    return this.ownership.has(this.key(realm, casKey));
   }
 
-  async getOwnership(shard: string, casKey: string): Promise<CasOwnership | null> {
-    return this.ownership.get(this.key(shard, casKey)) ?? null;
+  async getOwnership(realm: string, casKey: string): Promise<CasOwnership | null> {
+    return this.ownership.get(this.key(realm, casKey)) ?? null;
   }
 
   async checkOwnership(
-    shard: string,
+    realm: string,
     keys: string[]
   ): Promise<{ found: string[]; missing: string[] }> {
     const found: string[] = [];
     const missing: string[] = [];
     for (const k of keys) {
-      if (this.ownership.has(this.key(shard, k))) {
+      if (this.ownership.has(this.key(realm, k))) {
         found.push(k);
       } else {
         missing.push(k);
@@ -139,33 +139,33 @@ class MemoryOwnershipDb {
   }
 
   async addOwnership(
-    shard: string,
+    realm: string,
     casKey: string,
     createdBy: string,
     contentType: string,
     size: number
   ): Promise<CasOwnership> {
     const record: CasOwnership = {
-      shard,
+      realm,
       key: casKey,
       createdAt: Date.now(),
       createdBy,
       contentType,
       size,
     };
-    this.ownership.set(this.key(shard, casKey), record);
+    this.ownership.set(this.key(realm, casKey), record);
     return record;
   }
 
   async listNodes(
-    shard: string,
+    realm: string,
     limit: number = 10,
     startKey?: string
   ): Promise<{ nodes: CasOwnership[]; nextKey?: string; total: number }> {
-    // Get all nodes for this shard
+    // Get all nodes for this realm
     const allNodes: CasOwnership[] = [];
     for (const record of this.ownership.values()) {
-      if (record.shard === shard) {
+      if (record.realm === realm) {
         allNodes.push(record);
       }
     }
@@ -192,8 +192,8 @@ class MemoryOwnershipDb {
     return { nodes, nextKey, total: allNodes.length };
   }
 
-  async deleteOwnership(shard: string, casKey: string): Promise<boolean> {
-    return this.ownership.delete(this.key(shard, casKey));
+  async deleteOwnership(realm: string, casKey: string): Promise<boolean> {
+    return this.ownership.delete(this.key(realm, casKey));
   }
 }
 
@@ -381,9 +381,7 @@ class MemoryAgentTokensDb {
 
   async listByUser(userId: string): Promise<AgentTokenRecord[]> {
     const now = Date.now();
-    return Array.from(this.tokens.values()).filter(
-      (t) => t.userId === userId && t.expiresAt > now
-    );
+    return Array.from(this.tokens.values()).filter((t) => t.userId === userId && t.expiresAt > now);
   }
 
   async revoke(userId: string, tokenId: string): Promise<boolean> {
@@ -413,11 +411,12 @@ const MOCK_USER_ID = "mock-user-12345";
 const MOCK_USER_EMAIL = "test@example.com";
 
 // JWKS for Cognito JWT verification (skip if mock mode)
-const cognitoJwks = COGNITO_USER_POOL_ID && !USE_MOCK_AUTH
-  ? createRemoteJWKSet(new URL(`${COGNITO_ISSUER}/.well-known/jwks.json`), {
-      timeoutDuration: 10000, // 10 seconds timeout
-    })
-  : null;
+const cognitoJwks =
+  COGNITO_USER_POOL_ID && !USE_MOCK_AUTH
+    ? createRemoteJWKSet(new URL(`${COGNITO_ISSUER}/.well-known/jwks.json`), {
+        timeoutDuration: 10000, // 10 seconds timeout
+      })
+    : null;
 
 interface CognitoTokenPayload {
   sub: string;
@@ -579,7 +578,7 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
   if (token.type === "ticket") {
     return {
       userId: "",
-      scope: token.shard,
+      scope: token.realm,
       canRead: true,
       canWrite: !!token.writable,
       canIssueTicket: false,
@@ -819,7 +818,7 @@ async function handleAuth(req: Request, path: string): Promise<Response> {
     return jsonResponse(201, {
       id: ticketId,
       expiresAt: new Date(ticket.expiresAt).toISOString(),
-      shard: ticket.shard,
+      realm: ticket.realm,
       scope: ticket.scope,
       writable: ticket.writable ?? false,
       config: ticket.config,
@@ -901,13 +900,13 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
 
   // Resolve scope:
   // - @me or ~ resolves to user's scope
-  // - ticket ID (tkt_xxx) uses the ticket's shard (already in auth.scope)
+  // - ticket ID (tkt_xxx) uses the ticket's realm (already in auth.scope)
   // - explicit scope must match auth.scope
   let effectiveScope: string;
   if (scope === "@me" || scope === "~") {
     effectiveScope = auth.scope;
   } else if (scope.startsWith("tkt_")) {
-    // Ticket access - use the ticket's shard
+    // Ticket access - use the ticket's realm
     effectiveScope = auth.scope;
   } else {
     // Explicit scope - must match

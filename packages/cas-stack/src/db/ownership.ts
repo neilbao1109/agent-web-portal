@@ -18,7 +18,7 @@ export class OwnershipDb {
   private tableName: string;
 
   constructor(config: CasConfig, client?: DynamoDBDocumentClient) {
-    this.tableName = config.casOwnershipTable;
+    this.tableName = config.casRealmTable;
     this.client =
       client ??
       DynamoDBDocumentClient.from(new DynamoDBClient({}), {
@@ -27,13 +27,13 @@ export class OwnershipDb {
   }
 
   /**
-   * Check if a shard owns a specific key
+   * Check if a realm owns a specific key
    */
-  async hasOwnership(shard: string, key: string): Promise<boolean> {
+  async hasOwnership(realm: string, key: string): Promise<boolean> {
     const result = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { shard, key },
+        Key: { realm, key },
       })
     );
 
@@ -43,11 +43,11 @@ export class OwnershipDb {
   /**
    * Get ownership record
    */
-  async getOwnership(shard: string, key: string): Promise<CasOwnership | null> {
+  async getOwnership(realm: string, key: string): Promise<CasOwnership | null> {
     const result = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { shard, key },
+        Key: { realm, key },
       })
     );
 
@@ -55,10 +55,10 @@ export class OwnershipDb {
   }
 
   /**
-   * Check which keys a shard owns from a list
+   * Check which keys a realm owns from a list
    */
   async checkOwnership(
-    shard: string,
+    realm: string,
     keys: string[]
   ): Promise<{ found: string[]; missing: string[] }> {
     if (keys.length === 0) {
@@ -71,7 +71,7 @@ export class OwnershipDb {
 
     for (let i = 0; i < keys.length; i += batchSize) {
       const batch = keys.slice(i, i + batchSize);
-      const batchKeys = batch.map((key) => ({ shard, key }));
+      const batchKeys = batch.map((key) => ({ realm, key }));
 
       const result = await this.client.send(
         new BatchGetCommand({
@@ -99,14 +99,14 @@ export class OwnershipDb {
    * Add ownership record
    */
   async addOwnership(
-    shard: string,
+    realm: string,
     key: string,
     createdBy: string,
     contentType: string,
     size: number
   ): Promise<CasOwnership> {
     const ownership: CasOwnership = {
-      shard,
+      realm,
       key,
       createdAt: Date.now(),
       createdBy,
@@ -127,32 +127,32 @@ export class OwnershipDb {
   /**
    * Remove ownership record
    */
-  async removeOwnership(shard: string, key: string): Promise<void> {
+  async removeOwnership(realm: string, key: string): Promise<void> {
     await this.client.send(
       new DeleteCommand({
         TableName: this.tableName,
-        Key: { shard, key },
+        Key: { realm, key },
       })
     );
   }
 
   /**
-   * List all keys owned by a shard (with pagination)
+   * List all keys owned by a realm (with pagination)
    */
   async listKeys(
-    shard: string,
+    realm: string,
     limit: number = 100,
     startKey?: string
   ): Promise<{ keys: string[]; nextKey?: string }> {
     const result = await this.client.send(
       new QueryCommand({
         TableName: this.tableName,
-        KeyConditionExpression: "shard = :shard",
+        KeyConditionExpression: "realm = :realm",
         ExpressionAttributeValues: {
-          ":shard": shard,
+          ":realm": realm,
         },
         Limit: limit,
-        ExclusiveStartKey: startKey ? { shard, key: startKey } : undefined,
+        ExclusiveStartKey: startKey ? { realm, key: startKey } : undefined,
       })
     );
 
@@ -163,22 +163,25 @@ export class OwnershipDb {
   }
 
   /**
-   * List all ownership records for a shard (with pagination)
+   * List all ownership records for a realm (with pagination)
    */
   async listOwnership(
-    shard: string,
+    realm: string,
     limit: number = 100,
     startKey?: string
   ): Promise<{ nodes: CasOwnership[]; nextKey?: string; total?: number }> {
     const result = await this.client.send(
       new QueryCommand({
         TableName: this.tableName,
-        KeyConditionExpression: "shard = :shard",
+        KeyConditionExpression: "#realm = :realm",
+        ExpressionAttributeNames: {
+          "#realm": "realm",
+        },
         ExpressionAttributeValues: {
-          ":shard": shard,
+          ":realm": realm,
         },
         Limit: limit,
-        ExclusiveStartKey: startKey ? { shard, key: startKey } : undefined,
+        ExclusiveStartKey: startKey ? { realm, key: startKey } : undefined,
       })
     );
 
@@ -189,7 +192,7 @@ export class OwnershipDb {
   }
 
   /**
-   * Count how many shards reference a key (for GC)
+   * Count how many realms reference a key (for GC)
    */
   async countReferences(key: string): Promise<number> {
     const result = await this.client.send(

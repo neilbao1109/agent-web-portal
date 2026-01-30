@@ -6,7 +6,7 @@
  *
  * IMPORTANT: As an AI agent with an Agent Token, you can directly read/write blobs
  * without needing tickets. Use cas_read and cas_write directly.
- * 
+ *
  * Tickets (cas_get_ticket) are only needed when you want to grant temporary access
  * to OTHER tools or services that don't have your Agent Token.
  *
@@ -72,7 +72,8 @@ const MCP_TOOLS = [
       properties: {
         endpoint: {
           type: "string",
-          description: "The CAS endpoint URL from ticket. OPTIONAL - omit to use your default storage.",
+          description:
+            "The CAS endpoint URL from ticket. OPTIONAL - omit to use your default storage.",
         },
         key: {
           type: "string",
@@ -98,7 +99,8 @@ const MCP_TOOLS = [
       properties: {
         endpoint: {
           type: "string",
-          description: "The CAS endpoint URL from a writable ticket. OPTIONAL - omit to use your default storage.",
+          description:
+            "The CAS endpoint URL from a writable ticket. OPTIONAL - omit to use your default storage.",
         },
         content: {
           type: "string",
@@ -163,14 +165,11 @@ function mcpError(id: string | number, code: number, message: string): McpRespon
 
 function sendResponse(response: McpResponse) {
   const json = JSON.stringify(response);
-  process.stdout.write(json + "\n");
+  process.stdout.write(`${json}\n`);
 }
 
 // API request helper
-async function apiRequest(
-  path: string,
-  options: RequestInit = {}
-): Promise<Response> {
+async function apiRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const url = `${CAS_ENDPOINT}${path}`;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${CAS_AGENT_TOKEN}`,
@@ -222,9 +221,10 @@ async function handleRead(params: {
 }): Promise<{ content: string; contentType: string; size: number }> {
   const endpoint = params.endpoint || DEFAULT_ENDPOINT;
   const path = params.path || ".";
-  const url = path === "."
-    ? `${endpoint}/node/${encodeURIComponent(params.key)}`
-    : `${endpoint}/node/${encodeURIComponent(params.key)}/${path}`;
+  const url =
+    path === "."
+      ? `${endpoint}/node/${encodeURIComponent(params.key)}`
+      : `${endpoint}/node/${encodeURIComponent(params.key)}/${path}`;
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${CAS_AGENT_TOKEN}` },
@@ -290,9 +290,9 @@ async function handleWrite(params: {
   };
 }
 
-async function handleListNodes(params: {
-  limit?: number;
-}): Promise<{ nodes: Array<{ key: string; contentType?: string; size: number; createdAt: number }> }> {
+async function handleListNodes(params: { limit?: number }): Promise<{
+  nodes: Array<{ key: string; contentType?: string; size: number; createdAt: number }>;
+}> {
   const limit = params.limit || 100;
   const response = await apiRequest(`/api/cas/@me/nodes?limit=${limit}`);
 
@@ -312,16 +312,18 @@ async function handleRequest(request: McpRequest): Promise<void> {
   try {
     switch (method) {
       case "initialize":
-        sendResponse(mcpSuccess(id, {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: {},
-          },
-          serverInfo: {
-            name: "cas-mcp-server",
-            version: "1.0.0",
-          },
-        }));
+        sendResponse(
+          mcpSuccess(id, {
+            protocolVersion: "2024-11-05",
+            capabilities: {
+              tools: {},
+            },
+            serverInfo: {
+              name: "cas-mcp-server",
+              version: "1.0.0",
+            },
+          })
+        );
         break;
 
       case "notifications/initialized":
@@ -355,9 +357,11 @@ async function handleRequest(request: McpRequest): Promise<void> {
             throw new Error(`Unknown tool: ${toolName}`);
         }
 
-        sendResponse(mcpSuccess(id, {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        }));
+        sendResponse(
+          mcpSuccess(id, {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          })
+        );
         break;
       }
 
@@ -383,7 +387,7 @@ rl.on("line", async (line) => {
   try {
     const request = JSON.parse(line) as McpRequest;
     await handleRequest(request);
-  } catch (error) {
+  } catch (_error) {
     // Parse error
     sendResponse({
       jsonrpc: "2.0",

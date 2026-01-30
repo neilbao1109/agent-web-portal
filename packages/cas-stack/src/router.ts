@@ -434,7 +434,7 @@ export class Router {
       try {
         const serverConfig = loadServerConfig();
         const ticket = await this.tokensDb.createTicket(
-          auth.shard,
+          auth.realm,
           TokensDb.extractTokenId(auth.token.pk),
           parsed.data.scope,
           serverConfig,
@@ -446,13 +446,13 @@ export class Router {
 
         const ticketId = TokensDb.extractTokenId(ticket.pk);
         // Build endpoint URL for #cas-endpoint
-        const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.shard}/ticket/${ticketId}`;
+        const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.realm}/ticket/${ticketId}`;
 
         return jsonResponse(201, {
           id: ticketId,
           endpoint,
           expiresAt: new Date(ticket.expiresAt).toISOString(),
-          shard: ticket.shard,
+          realm: ticket.realm,
           scope: ticket.scope,
           writable: ticket.writable ?? false,
           config: ticket.config,
@@ -481,8 +481,10 @@ export class Router {
     // POST /auth/tokens - Create agent token
     if (req.method === "POST" && path === "/tokens") {
       const body = this.parseJson(req);
+      console.log("[CAS] Create agent token - body:", JSON.stringify(body));
       const parsed = CreateAgentTokenSchema.safeParse(body);
       if (!parsed.success) {
+        console.log("[CAS] Validation failed:", JSON.stringify(parsed.error.issues));
         return errorResponse(400, "Invalid request", parsed.error.issues);
       }
 
@@ -545,13 +547,13 @@ export class Router {
   // ============================================================================
 
   private async handleCas(req: HttpRequest): Promise<HttpResponse> {
-    // Parse path: /cas/{shard}/...
+    // Parse path: /cas/{realm}/...
     const casMatch = req.path.match(/^\/cas\/([^/]+)(.*)$/);
     if (!casMatch) {
       return errorResponse(404, "Invalid CAS path");
     }
 
-    const requestedShard = casMatch[1]!;
+    const requestedRealm = casMatch[1]!;
     const subPath = casMatch[2] ?? "";
 
     // Authenticate
@@ -560,84 +562,84 @@ export class Router {
       return errorResponse(401, "Unauthorized");
     }
 
-    // Check shard access
-    if (!this.authMiddleware.checkShardAccess(auth, requestedShard)) {
-      return errorResponse(403, "Access denied to this shard");
+    // Check realm access
+    if (!this.authMiddleware.checkRealmAccess(auth, requestedRealm)) {
+      return errorResponse(403, "Access denied to this realm");
     }
 
-    const shard = this.authMiddleware.resolveShard(auth, requestedShard);
+    const realm = this.authMiddleware.resolveRealm(auth, requestedRealm);
 
-    // POST /cas/{shard}/resolve
+    // POST /cas/{realm}/resolve
     if (req.method === "POST" && subPath === "/resolve") {
-      return this.handleResolve(auth, shard, req);
+      return this.handleResolve(auth, realm, req);
     }
 
-    // GET /cas/{shard}/nodes - List all nodes
+    // GET /cas/{realm}/nodes - List all nodes
     if (req.method === "GET" && subPath === "/nodes") {
-      return this.handleListNodes(auth, shard, req);
+      return this.handleListNodes(auth, realm, req);
     }
 
-    // PUT /cas/{shard}/chunk/:key - Upload chunk (client-side chunking)
+    // PUT /cas/{realm}/chunk/:key - Upload chunk (client-side chunking)
     const putChunkMatch = subPath.match(/^\/chunk\/(.+)$/);
     if (req.method === "PUT" && putChunkMatch) {
       const key = decodeURIComponent(putChunkMatch[1]!);
-      return this.handlePutChunk(auth, shard, key, req);
+      return this.handlePutChunk(auth, realm, key, req);
     }
 
-    // GET /cas/{shard}/chunk/:key - Get chunk data
+    // GET /cas/{realm}/chunk/:key - Get chunk data
     const getChunkMatch = subPath.match(/^\/chunk\/(.+)$/);
     if (req.method === "GET" && getChunkMatch) {
       const key = decodeURIComponent(getChunkMatch[1]!);
-      return this.handleGetChunk(auth, shard, key);
+      return this.handleGetChunk(auth, realm, key);
     }
 
-    // PUT /cas/{shard}/file - Upload file node (references chunks)
+    // PUT /cas/{realm}/file - Upload file node (references chunks)
     if (req.method === "PUT" && subPath === "/file") {
-      return this.handlePutFile(auth, shard, req);
+      return this.handlePutFile(auth, realm, req);
     }
 
-    // PUT /cas/{shard}/collection - Upload collection node
+    // PUT /cas/{realm}/collection - Upload collection node
     if (req.method === "PUT" && subPath === "/collection") {
-      return this.handlePutCollection(auth, shard, req);
+      return this.handlePutCollection(auth, realm, req);
     }
 
-    // GET /cas/{shard}/node/:key - Get application layer node
+    // GET /cas/{realm}/node/:key - Get application layer node
     const getNodeMatch = subPath.match(/^\/node\/(.+)$/);
     if (req.method === "GET" && getNodeMatch) {
       const key = decodeURIComponent(getNodeMatch[1]!);
-      return this.handleGetNode(auth, shard, key);
+      return this.handleGetNode(auth, realm, key);
     }
 
-    // GET /cas/{shard}/raw/:key - Get storage layer node
+    // GET /cas/{realm}/raw/:key - Get storage layer node
     const getRawMatch = subPath.match(/^\/raw\/(.+)$/);
     if (req.method === "GET" && getRawMatch) {
       const key = decodeURIComponent(getRawMatch[1]!);
-      return this.handleGetRawNode(auth, shard, key);
+      return this.handleGetRawNode(auth, realm, key);
     }
 
-    // Legacy: PUT /cas/{shard}/node/:key (for backward compatibility)
+    // Legacy: PUT /cas/{realm}/node/:key (for backward compatibility)
     const putNodeMatch = subPath.match(/^\/node\/(.+)$/);
     if (req.method === "PUT" && putNodeMatch) {
       const key = decodeURIComponent(putNodeMatch[1]!);
-      return this.handlePutChunk(auth, shard, key, req);
+      return this.handlePutChunk(auth, realm, key, req);
     }
 
-    // Legacy: GET /cas/{shard}/dag/:key
+    // Legacy: GET /cas/{realm}/dag/:key
     const getDagMatch = subPath.match(/^\/dag\/(.+)$/);
     if (req.method === "GET" && getDagMatch) {
       const key = decodeURIComponent(getDagMatch[1]!);
-      return this.handleGetDag(auth, shard, key);
+      return this.handleGetDag(auth, realm, key);
     }
 
     return errorResponse(404, "CAS endpoint not found");
   }
 
   /**
-   * POST /cas/{shard}/resolve
+   * POST /cas/{realm}/resolve
    */
   private async handleResolve(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     req: HttpRequest
   ): Promise<HttpResponse> {
     const body = this.parseJson(req);
@@ -648,35 +650,35 @@ export class Router {
 
     const { nodes } = parsed.data;
 
-    // Check which nodes exist in this shard
-    const { missing } = await this.ownershipDb.checkOwnership(shard, nodes);
+    // Check which nodes exist in this realm
+    const { missing } = await this.ownershipDb.checkOwnership(realm, nodes);
 
     return jsonResponse(200, { missing });
   }
 
   /**
-   * GET /cas/{shard}/nodes - List all nodes for a shard
+   * GET /cas/{realm}/nodes - List all nodes for a realm
    */
   private async handleListNodes(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     req: HttpRequest
   ): Promise<HttpResponse> {
     const url = new URL(req.path, "http://localhost");
     const limit = Math.min(Number.parseInt(url.searchParams.get("limit") ?? "100", 10), 1000);
     const startKey = url.searchParams.get("startKey") ?? undefined;
 
-    const result = await this.ownershipDb.listOwnership(shard, limit, startKey);
+    const result = await this.ownershipDb.listOwnership(realm, limit, startKey);
 
     return jsonResponse(200, result);
   }
 
   /**
-   * PUT /cas/{shard}/chunk/:key - Upload chunk data
+   * PUT /cas/{realm}/chunk/:key - Upload chunk data
    */
   private async handlePutChunk(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     key: string,
     req: HttpRequest
   ): Promise<HttpResponse> {
@@ -710,7 +712,7 @@ export class Router {
 
     // Add ownership record
     const tokenId = TokensDb.extractTokenId(auth.token.pk);
-    await this.ownershipDb.addOwnership(shard, result.key, tokenId, contentType, result.size);
+    await this.ownershipDb.addOwnership(realm, result.key, tokenId, contentType, result.size);
 
     return jsonResponse(200, {
       key: result.key,
@@ -719,11 +721,11 @@ export class Router {
   }
 
   /**
-   * GET /cas/{shard}/chunk/:key - Get chunk binary data
+   * GET /cas/{realm}/chunk/:key - Get chunk binary data
    */
   private async handleGetChunk(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     key: string
   ): Promise<HttpResponse> {
     if (!this.authMiddleware.checkReadAccess(auth, key)) {
@@ -731,7 +733,7 @@ export class Router {
     }
 
     // Check ownership
-    const hasAccess = await this.ownershipDb.hasOwnership(shard, key);
+    const hasAccess = await this.ownershipDb.hasOwnership(realm, key);
     if (!hasAccess) {
       return errorResponse(404, "Not found");
     }
@@ -746,11 +748,11 @@ export class Router {
   }
 
   /**
-   * PUT /cas/{shard}/file - Upload file node
+   * PUT /cas/{realm}/file - Upload file node
    */
   private async handlePutFile(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     req: HttpRequest
   ): Promise<HttpResponse> {
     if (!this.authMiddleware.checkWriteAccess(auth)) {
@@ -772,7 +774,7 @@ export class Router {
 
     // Verify all chunks exist
     for (const chunkKey of chunks) {
-      const hasChunk = await this.ownershipDb.hasOwnership(shard, chunkKey);
+      const hasChunk = await this.ownershipDb.hasOwnership(realm, chunkKey);
       if (!hasChunk) {
         return errorResponse(400, `Chunk not found: ${chunkKey}`);
       }
@@ -799,7 +801,7 @@ export class Router {
 
     // Add ownership
     const tokenId = TokensDb.extractTokenId(auth.token.pk);
-    await this.ownershipDb.addOwnership(shard, result.key, tokenId, contentType, totalSize);
+    await this.ownershipDb.addOwnership(realm, result.key, tokenId, contentType, totalSize);
 
     // Mark ticket as written if applicable
     if (auth.token.type === "ticket") {
@@ -815,11 +817,11 @@ export class Router {
   }
 
   /**
-   * PUT /cas/{shard}/collection - Upload collection node
+   * PUT /cas/{realm}/collection - Upload collection node
    */
   private async handlePutCollection(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     req: HttpRequest
   ): Promise<HttpResponse> {
     if (!this.authMiddleware.checkWriteAccess(auth)) {
@@ -842,7 +844,7 @@ export class Router {
 
     // Verify all children exist
     for (const [name, childKey] of Object.entries(children)) {
-      const hasChild = await this.ownershipDb.hasOwnership(shard, childKey);
+      const hasChild = await this.ownershipDb.hasOwnership(realm, childKey);
       if (!hasChild) {
         return errorResponse(400, `Child not found: ${name} -> ${childKey}`);
       }
@@ -851,7 +853,7 @@ export class Router {
     // Calculate total size from children
     let totalSize = 0;
     for (const childKey of Object.values(children)) {
-      const ownership = await this.ownershipDb.getOwnership(shard, childKey);
+      const ownership = await this.ownershipDb.getOwnership(realm, childKey);
       if (ownership) {
         totalSize += ownership.size;
       }
@@ -869,7 +871,7 @@ export class Router {
     // Add ownership
     const tokenId = TokensDb.extractTokenId(auth.token.pk);
     await this.ownershipDb.addOwnership(
-      shard,
+      realm,
       result.key,
       tokenId,
       "application/vnd.cas.collection",
@@ -889,11 +891,11 @@ export class Router {
   }
 
   /**
-   * GET /cas/{shard}/node/:key - Get application layer node (CasNode)
+   * GET /cas/{realm}/node/:key - Get application layer node (CasNode)
    */
   private async handleGetNode(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     key: string
   ): Promise<HttpResponse> {
     if (!this.authMiddleware.checkReadAccess(auth, key)) {
@@ -901,7 +903,7 @@ export class Router {
     }
 
     // Check ownership
-    const hasAccess = await this.ownershipDb.hasOwnership(shard, key);
+    const hasAccess = await this.ownershipDb.hasOwnership(realm, key);
     if (!hasAccess) {
       return errorResponse(404, "Not found");
     }
@@ -913,17 +915,17 @@ export class Router {
     }
 
     // Expand to application layer view
-    const node = await this.expandToAppNode(rawNode, shard, auth);
+    const node = await this.expandToAppNode(rawNode, realm, auth);
 
     return jsonResponse(200, node);
   }
 
   /**
-   * GET /cas/{shard}/raw/:key - Get storage layer node (CasRawNode)
+   * GET /cas/{realm}/raw/:key - Get storage layer node (CasRawNode)
    */
   private async handleGetRawNode(
     auth: AuthContext,
-    shard: string,
+    realm: string,
     key: string
   ): Promise<HttpResponse> {
     if (!this.authMiddleware.checkReadAccess(auth, key)) {
@@ -931,7 +933,7 @@ export class Router {
     }
 
     // Check ownership
-    const hasAccess = await this.ownershipDb.hasOwnership(shard, key);
+    const hasAccess = await this.ownershipDb.hasOwnership(realm, key);
     if (!hasAccess) {
       return errorResponse(404, "Not found");
     }
@@ -975,7 +977,7 @@ export class Router {
   /**
    * Expand raw node to application layer node
    */
-  private async expandToAppNode(rawNode: any, shard: string, auth: AuthContext): Promise<any> {
+  private async expandToAppNode(rawNode: any, realm: string, auth: AuthContext): Promise<any> {
     if (rawNode.kind === "file") {
       return {
         kind: "file",
@@ -990,7 +992,7 @@ export class Router {
       for (const [name, childKey] of Object.entries(rawNode.children as Record<string, string>)) {
         const childRaw = await this.getRawNodeData(childKey);
         if (childRaw) {
-          expandedChildren[name] = await this.expandToAppNode(childRaw, shard, auth);
+          expandedChildren[name] = await this.expandToAppNode(childRaw, realm, auth);
         }
       }
       return {
@@ -1006,15 +1008,15 @@ export class Router {
   }
 
   /**
-   * GET /cas/{shard}/dag/:key (legacy, for backward compatibility)
+   * GET /cas/{realm}/dag/:key (legacy, for backward compatibility)
    */
-  private async handleGetDag(auth: AuthContext, shard: string, key: string): Promise<HttpResponse> {
+  private async handleGetDag(auth: AuthContext, realm: string, key: string): Promise<HttpResponse> {
     if (!this.authMiddleware.checkReadAccess(auth, key)) {
       return errorResponse(403, "Read access denied");
     }
 
     // Check ownership of root
-    const hasAccess = await this.ownershipDb.hasOwnership(shard, key);
+    const hasAccess = await this.ownershipDb.hasOwnership(realm, key);
     if (!hasAccess) {
       return errorResponse(404, "Not found");
     }
@@ -1064,12 +1066,8 @@ export class Router {
   private parseJson(req: HttpRequest): unknown {
     if (!req.body) return {};
 
-    const bodyStr =
-      typeof req.body === "string"
-        ? req.body
-        : req.isBase64Encoded
-          ? Buffer.from(req.body.toString(), "base64").toString("utf-8")
-          : req.body.toString("utf-8");
+    // Body is already decoded by handler, just convert to string
+    const bodyStr = typeof req.body === "string" ? req.body : req.body.toString("utf-8");
 
     try {
       return JSON.parse(bodyStr);
@@ -1081,12 +1079,13 @@ export class Router {
   private getBinaryBody(req: HttpRequest): Buffer {
     if (!req.body) return Buffer.alloc(0);
 
+    // Body is already decoded by handler
     if (Buffer.isBuffer(req.body)) {
-      return req.isBase64Encoded ? Buffer.from(req.body.toString(), "base64") : req.body;
+      return req.body;
     }
 
     if (typeof req.body === "string") {
-      return req.isBase64Encoded ? Buffer.from(req.body, "base64") : Buffer.from(req.body, "utf-8");
+      return Buffer.from(req.body, "utf-8");
     }
 
     return Buffer.alloc(0);

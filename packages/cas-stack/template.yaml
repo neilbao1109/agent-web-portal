@@ -109,18 +109,18 @@ Resources:
           Projection:
             ProjectionType: ALL
 
-  # CAS Ownership table: maps scope -> key for access control
-  CasOwnershipTable:
+  # CAS Realm table: maps realm -> key for access control
+  CasRealmTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "${AWS::StackName}-cas-ownership"
+      TableName: !Sub "${AWS::StackName}-cas-realm"
       AttributeDefinitions:
-        - AttributeName: scope
+        - AttributeName: realm
           AttributeType: S
         - AttributeName: key
           AttributeType: S
       KeySchema:
-        - AttributeName: scope
+        - AttributeName: realm
           KeyType: HASH
         - AttributeName: key
           KeyType: RANGE
@@ -130,7 +130,7 @@ Resources:
           KeySchema:
             - AttributeName: key
               KeyType: HASH
-            - AttributeName: scope
+            - AttributeName: realm
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
@@ -271,7 +271,7 @@ Resources:
       Environment:
         Variables:
           TOKENS_TABLE: !Ref TokensTable
-          CAS_OWNERSHIP_TABLE: !Ref CasOwnershipTable
+          CAS_REALM_TABLE: !Ref CasRealmTable
           CAS_DAG_TABLE: !Ref CasDagTable
           CAS_BUCKET: !Ref CasBucket
           COGNITO_USER_POOL_ID: !Ref UserPool
@@ -282,7 +282,7 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref TokensTable
         - DynamoDBCrudPolicy:
-            TableName: !Ref CasOwnershipTable
+            TableName: !Ref CasRealmTable
         - DynamoDBCrudPolicy:
             TableName: !Ref CasDagTable
         - S3CrudPolicy:
@@ -342,9 +342,9 @@ Outputs:
     Description: DynamoDB table for tokens
     Value: !Ref TokensTable
   
-  CasOwnershipTableName:
-    Description: DynamoDB table for CAS ownership
-    Value: !Ref CasOwnershipTable
+  CasRealmTableName:
+    Description: DynamoDB table for CAS realm
+    Value: !Ref CasRealmTable
   
   CasDagTableName:
     Description: DynamoDB table for CAS DAG

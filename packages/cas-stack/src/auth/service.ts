@@ -136,7 +136,7 @@ export class AuthService {
     const serverConfig = loadServerConfig();
 
     const ticket = await this.tokensDb.createTicket(
-      auth.shard,
+      auth.realm,
       issuerId,
       request.scope,
       serverConfig,
@@ -149,13 +149,13 @@ export class AuthService {
     const ticketId = TokensDb.extractTokenId(ticket.pk);
 
     // Construct endpoint URL
-    const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.shard}/ticket/${ticketId}`;
+    const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.realm}/ticket/${ticketId}`;
 
     return {
       id: ticketId,
       endpoint,
       expiresAt: new Date(ticket.expiresAt).toISOString(),
-      shard: ticket.shard,
+      realm: ticket.realm,
       scope: ticket.scope,
       writable: ticket.writable ?? false,
       config: ticket.config,

@@ -120,10 +120,7 @@ const MCP_TOOLS = [
 ];
 
 // API request helper
-async function apiRequest(
-  path: string,
-  options: RequestInit = {}
-): Promise<Response> {
+async function apiRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const url = `${CAS_ENDPOINT}${path}`;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${CAS_AGENT_TOKEN}`,
@@ -173,9 +170,10 @@ async function handleRead(params: {
   path?: string;
 }): Promise<{ content: string; contentType: string; size: number }> {
   const path = params.path || ".";
-  const url = path === "."
-    ? `${params.endpoint}/node/${encodeURIComponent(params.key)}`
-    : `${params.endpoint}/node/${encodeURIComponent(params.key)}/${path}`;
+  const url =
+    path === "."
+      ? `${params.endpoint}/node/${encodeURIComponent(params.key)}`
+      : `${params.endpoint}/node/${encodeURIComponent(params.key)}/${path}`;
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${CAS_AGENT_TOKEN}` },
@@ -257,9 +255,9 @@ async function handleWrite(params: {
   };
 }
 
-async function handleListNodes(params: {
-  limit?: number;
-}): Promise<{ nodes: Array<{ key: string; contentType?: string; size: number; createdAt: number }> }> {
+async function handleListNodes(params: { limit?: number }): Promise<{
+  nodes: Array<{ key: string; contentType?: string; size: number; createdAt: number }>;
+}> {
   const limit = params.limit || 100;
   const response = await apiRequest(`/api/cas/@me/nodes?limit=${limit}`);
 
@@ -360,7 +358,7 @@ async function handleMcpMessage(message: McpMessage): Promise<McpMessage | null>
 }
 
 // HTTP Server with SSE support
-const server = Bun.serve({
+const _server = Bun.serve({
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);
@@ -414,20 +412,19 @@ const server = Bun.serve({
         }
 
         return new Response(null, { status: 204, headers: corsHeaders });
-      } catch (error) {
-        return new Response(
-          JSON.stringify({ error: "Invalid request" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-        );
+      } catch (_error) {
+        return new Response(JSON.stringify({ error: "Invalid request" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
       }
     }
 
     // Health check
     if (url.pathname === "/" || url.pathname === "/health") {
-      return new Response(
-        JSON.stringify({ status: "ok", service: "cas-mcp-server" }),
-        { headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ status: "ok", service: "cas-mcp-server" }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     return new Response("Not Found", { status: 404, headers: corsHeaders });

@@ -285,7 +285,7 @@ export class McpHandler {
     }
 
     const ticket = await this.tokensDb.createTicket(
-      auth.shard,
+      auth.realm,
       TokensDb.extractTokenId(auth.token.pk),
       parsed.data.scope,
       this.serverConfig,
@@ -296,7 +296,7 @@ export class McpHandler {
     );
 
     const ticketId = TokensDb.extractTokenId(ticket.pk);
-    const endpoint = `${this.serverConfig.baseUrl}/api/cas/${ticket.shard}/ticket/${ticketId}`;
+    const endpoint = `${this.serverConfig.baseUrl}/api/cas/${ticket.realm}/ticket/${ticketId}`;
 
     return mcpSuccess(id, {
       content: [
@@ -325,17 +325,17 @@ export class McpHandler {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid parameters", parsed.error.issues);
     }
 
-    // Parse endpoint to extract shard and ticket
+    // Parse endpoint to extract realm and ticket
     const endpointMatch = parsed.data.endpoint.match(/\/api\/cas\/([^/]+)\/ticket\/([^/]+)$/);
     if (!endpointMatch) {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid endpoint URL format");
     }
 
-    const [, shard, ticketId] = endpointMatch;
+    const [, realm, ticketId] = endpointMatch;
 
     // Verify ticket
     const ticket = await this.tokensDb.getToken(ticketId!);
-    if (!ticket || ticket.type !== "ticket" || ticket.shard !== shard) {
+    if (!ticket || ticket.type !== "ticket" || ticket.realm !== realm) {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid or expired ticket");
     }
 
@@ -352,7 +352,7 @@ export class McpHandler {
     }
 
     // Check ownership
-    const hasAccess = await this.ownershipDb.hasOwnership(shard!, targetKey);
+    const hasAccess = await this.ownershipDb.hasOwnership(realm!, targetKey);
     if (!hasAccess) {
       return mcpError(id, MCP_INVALID_PARAMS, "Node not found or not accessible");
     }
@@ -442,17 +442,17 @@ export class McpHandler {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid parameters", parsed.error.issues);
     }
 
-    // Parse endpoint to extract shard and ticket
+    // Parse endpoint to extract realm and ticket
     const endpointMatch = parsed.data.endpoint.match(/\/api\/cas\/([^/]+)\/ticket\/([^/]+)$/);
     if (!endpointMatch) {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid endpoint URL format");
     }
 
-    const [, shard, ticketId] = endpointMatch;
+    const [, realm, ticketId] = endpointMatch;
 
     // Verify ticket is writable
     const ticket = await this.tokensDb.getToken(ticketId!);
-    if (!ticket || ticket.type !== "ticket" || ticket.shard !== shard) {
+    if (!ticket || ticket.type !== "ticket" || ticket.realm !== realm) {
       return mcpError(id, MCP_INVALID_PARAMS, "Invalid or expired ticket");
     }
 
@@ -468,7 +468,7 @@ export class McpHandler {
 
     // Record chunk ownership
     await this.ownershipDb.addOwnership(
-      shard!,
+      realm!,
       chunkResult.key,
       ticketId!, // createdBy
       "application/octet-stream",
@@ -488,7 +488,7 @@ export class McpHandler {
 
     // Record file node ownership
     await this.ownershipDb.addOwnership(
-      shard!,
+      realm!,
       fileResult.key,
       ticketId!,
       parsed.data.contentType,

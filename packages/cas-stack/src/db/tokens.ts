@@ -118,7 +118,7 @@ export class TokensDb {
    * Create a ticket with new structure
    */
   async createTicket(
-    shard: string,
+    realm: string,
     issuerId: string,
     scope: string | string[],
     serverConfig: CasServerConfig,
@@ -138,7 +138,7 @@ export class TokensDb {
     const ticket: Ticket = {
       pk: `token#${ticketId}`,
       type: "ticket",
-      shard,
+      realm,
       issuerId,
       scope,
       writable: options?.writable,
@@ -281,9 +281,7 @@ export class TokensDb {
         TableName: this.tableName,
         Item: {
           ...token,
-          // Add GSI key for listing by user
-          gsi1pk: `user#${userId}`,
-          gsi1sk: `agent#${tokenId}`,
+          // userId is already in token, used by GSI "by-user"
         },
       })
     );
@@ -298,11 +296,12 @@ export class TokensDb {
     const result = await this.client.send(
       new QueryCommand({
         TableName: this.tableName,
-        IndexName: "gsi1",
-        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+        IndexName: "by-user",
+        KeyConditionExpression: "userId = :userId",
+        FilterExpression: "begins_with(pk, :prefix)",
         ExpressionAttributeValues: {
-          ":pk": `user#${userId}`,
-          ":sk": "agent#",
+          ":userId": userId,
+          ":prefix": "token#agt_",
         },
       })
     );

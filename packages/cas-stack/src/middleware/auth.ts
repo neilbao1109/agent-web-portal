@@ -1,9 +1,10 @@
 /**
  * CAS Stack - Authentication Middleware
  *
- * Supports two authentication methods:
- * 1. Bearer Token (User Token / Ticket) - Traditional token-based auth
- * 2. AWP Signed Requests - ECDSA P-256 signature-based auth for AI agents
+ * Supports three authentication methods:
+ * 1. Bearer Token (Agent Token / Ticket) - Token stored in database
+ * 2. Bearer JWT (Cognito Access Token) - JWT from Cognito User Pool
+ * 3. AWP Signed Requests - ECDSA P-256 signature-based auth for AI agents
  */
 
 import { createHash } from "node:crypto";
@@ -13,10 +14,12 @@ import { TokensDb } from "../db/tokens.ts";
 import type { AuthContext, CasConfig, HttpRequest, Token } from "../types.ts";
 
 export class AuthMiddleware {
+  private config: CasConfig;
   private tokensDb: TokensDb;
   private awpPubkeyStore: PubkeyStore | null;
 
   constructor(config: CasConfig, tokensDb?: TokensDb, awpPubkeyStore?: PubkeyStore) {
+    this.config = config;
     this.tokensDb = tokensDb ?? new TokensDb(config);
     this.awpPubkeyStore = awpPubkeyStore ?? null;
   }
@@ -123,7 +126,7 @@ export class AuthMiddleware {
         expiresAt: Date.now() + 3600000, // 1 hour
       },
       userId: auth.userId,
-      shard: `usr_${auth.userId}`,
+      realm: `usr_${auth.userId}`,
       canRead: true,
       canWrite: true,
       canIssueTicket: true,
@@ -140,8 +143,8 @@ export class AuthMiddleware {
     }
 
     // Parse header: "Bearer xxx", "Ticket xxx", or "Agent xxx"
-    const [scheme, tokenId] = authHeader.split(" ");
-    if (!scheme || !tokenId) {
+    const [scheme, tokenValue] = authHeader.split(" ");
+    if (!scheme || !tokenValue) {
       return null;
     }
 
@@ -154,14 +157,83 @@ export class AuthMiddleware {
       return null;
     }
 
+    // Check if it looks like a JWT (has 3 parts separated by dots)
+    if (normalizedScheme === "bearer" && tokenValue.split(".").length === 3) {
+      return this.authenticateJwt(tokenValue);
+    }
+
     // Get token from database
-    const token = await this.tokensDb.getToken(tokenId);
+    const token = await this.tokensDb.getToken(tokenValue);
     if (!token) {
       return null;
     }
 
     // Build auth context based on token type
     return this.buildAuthContext(token);
+  }
+
+  /**
+   * Authenticate using Cognito JWT token
+   */
+  private async authenticateJwt(jwt: string): Promise<AuthContext | null> {
+    try {
+      // Decode JWT payload (base64url encoded)
+      const parts = jwt.split(".");
+      if (parts.length !== 3) {
+        return null;
+      }
+
+      const payloadBase64 = parts[1]!;
+      // Convert base64url to base64
+      const base64 = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(Buffer.from(base64, "base64").toString("utf-8"));
+
+      // Validate token issuer
+      const expectedIssuer = `https://cognito-idp.${this.config.cognitoRegion}.amazonaws.com/${this.config.cognitoUserPoolId}`;
+      if (payload.iss !== expectedIssuer) {
+        console.error("[Auth] JWT issuer mismatch:", payload.iss, "expected:", expectedIssuer);
+        return null;
+      }
+
+      // Validate token is not expired
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < now) {
+        console.error("[Auth] JWT expired");
+        return null;
+      }
+
+      // Validate token type (access token)
+      if (payload.token_use !== "access") {
+        console.error("[Auth] JWT is not an access token:", payload.token_use);
+        return null;
+      }
+
+      // Get user ID from sub claim
+      const userId = payload.sub;
+      if (!userId) {
+        console.error("[Auth] JWT missing sub claim");
+        return null;
+      }
+
+      // Build auth context for Cognito user
+      return {
+        token: {
+          pk: `jwt#${userId}`,
+          type: "user",
+          userId,
+          createdAt: (payload.iat || now) * 1000,
+          expiresAt: (payload.exp || now + 3600) * 1000,
+        },
+        userId,
+        realm: `usr_${userId}`,
+        canRead: true,
+        canWrite: true,
+        canIssueTicket: true,
+      };
+    } catch (error) {
+      console.error("[Auth] JWT decode error:", error);
+      return null;
+    }
   }
 
   /**
@@ -173,7 +245,7 @@ export class AuthMiddleware {
         return {
           token,
           userId: token.userId,
-          shard: `usr_${token.userId}`,
+          realm: `usr_${token.userId}`,
           canRead: true,
           canWrite: true,
           canIssueTicket: true,
@@ -184,7 +256,7 @@ export class AuthMiddleware {
         return {
           token,
           userId: token.userId,
-          shard: `usr_${token.userId}`,
+          realm: `usr_${token.userId}`,
           canRead: true,
           canWrite: true,
           canIssueTicket: true,
@@ -194,7 +266,7 @@ export class AuthMiddleware {
         return {
           token,
           userId: "", // Tickets don't have direct user context
-          shard: token.shard,
+          realm: token.realm,
           canRead: true, // Tickets always have read access to scope
           canWrite: !!token.writable && !token.written, // Can write if writable and not already written
           canIssueTicket: false,
@@ -204,14 +276,15 @@ export class AuthMiddleware {
   }
 
   /**
-   * Check if auth context can access the requested shard
+   * Check if auth context can access the requested realm
    */
-  checkShardAccess(auth: AuthContext, requestedShard: string): boolean {
+  checkRealmAccess(auth: AuthContext, requestedRealm: string): boolean {
     // Resolve @me or ~ alias
-    const effectiveShard = (requestedShard === "@me" || requestedShard === "~") ? auth.shard : requestedShard;
+    const effectiveRealm =
+      requestedRealm === "@me" || requestedRealm === "~" ? auth.realm : requestedRealm;
 
-    // Check if auth shard matches requested shard
-    return auth.shard === effectiveShard;
+    // Check if auth realm matches requested realm
+    return auth.realm === effectiveRealm;
   }
 
   /**
@@ -306,23 +379,23 @@ export class AuthMiddleware {
   }
 
   /**
-   * Resolve shard alias (@me or ~ -> actual shard)
+   * Resolve realm alias (@me or ~ -> actual realm)
    */
-  resolveShard(auth: AuthContext, requestedShard: string): string {
-    return (requestedShard === "@me" || requestedShard === "~") ? auth.shard : requestedShard;
+  resolveRealm(auth: AuthContext, requestedRealm: string): string {
+    return requestedRealm === "@me" || requestedRealm === "~" ? auth.realm : requestedRealm;
   }
 
   /**
-   * @deprecated Use checkShardAccess instead
+   * @deprecated Use checkRealmAccess instead
    */
   checkScopeAccess(auth: AuthContext, requestedScope: string): boolean {
-    return this.checkShardAccess(auth, requestedScope);
+    return this.checkRealmAccess(auth, requestedScope);
   }
 
   /**
-   * @deprecated Use resolveShard instead
+   * @deprecated Use resolveRealm instead
    */
   resolveScope(auth: AuthContext, requestedScope: string): string {
-    return this.resolveShard(auth, requestedScope);
+    return this.resolveRealm(auth, requestedScope);
   }
 }

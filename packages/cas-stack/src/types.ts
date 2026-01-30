@@ -47,7 +47,7 @@ export type WritableConfig =
  */
 export interface Ticket extends BaseToken {
   type: "ticket";
-  shard: string; // user namespace (e.g., "usr_{userId}")
+  realm: string; // user namespace (e.g., "usr_{userId}")
   issuerId: string; // who issued this ticket
   scope: string | string[]; // DAG root keys that can be accessed
   writable?: WritableConfig; // write permission config
@@ -138,7 +138,7 @@ export interface CreateTicketResponse {
   id: string;
   endpoint: string; // Full endpoint URL for #cas-endpoint
   expiresAt: string;
-  shard: string;
+  realm: string;
   scope: string | string[];
   writable: WritableConfig | false;
   config: {
@@ -156,10 +156,10 @@ export interface CreateTicketResponse {
 export type NodeKind = "collection" | "file" | "chunk";
 
 /**
- * CAS Ownership - tracks which shard owns a key
+ * CAS Ownership - tracks which realm owns a key
  */
 export interface CasOwnership {
-  shard: string;
+  realm: string;
   key: string;
   createdAt: number;
   createdBy: string;
@@ -264,7 +264,7 @@ export interface UploadDagResponse {
 export interface AuthContext {
   token: Token;
   userId: string;
-  shard: string; // user namespace
+  realm: string; // user namespace
   canRead: boolean;
   canWrite: boolean;
   canIssueTicket: boolean;
@@ -308,7 +308,7 @@ export interface CasServerConfig {
 
 export interface CasConfig {
   tokensTable: string;
-  casOwnershipTable: string;
+  casRealmTable: string;
   casDagTable: string;
   casBucket: string;
   cognitoUserPoolId: string;
@@ -331,7 +331,7 @@ export function loadServerConfig(): CasServerConfig {
 export function loadConfig(): CasConfig {
   return {
     tokensTable: process.env.TOKENS_TABLE ?? "cas-tokens",
-    casOwnershipTable: process.env.CAS_OWNERSHIP_TABLE ?? "cas-ownership",
+    casRealmTable: process.env.CAS_REALM_TABLE ?? "cas-realm",
     casDagTable: process.env.CAS_DAG_TABLE ?? "cas-dag",
     casBucket: process.env.CAS_BUCKET ?? "cas-bucket",
     cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID ?? "",

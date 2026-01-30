@@ -2,7 +2,13 @@
  * CAS Stack - AWS Lambda Handler
  */
 
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResult,
+  APIGatewayProxyResultV2,
+  Context,
+} from "aws-lambda";
 import { Router } from "./router.ts";
 import { type HttpRequest, loadConfig } from "./types.ts";
 
@@ -11,19 +17,33 @@ const config = loadConfig();
 const router = new Router(config);
 
 /**
- * Convert API Gateway event to HttpRequest
+ * Type guard to detect REST API v1 event format
  */
-function toHttpRequest(event: APIGatewayProxyEventV2): HttpRequest {
+function isRestApiEvent(event: any): event is APIGatewayProxyEvent {
+  return event.httpMethod !== undefined;
+}
+
+/**
+ * Convert API Gateway event to HttpRequest (supports both v1 REST API and v2 HTTP API)
+ */
+function toHttpRequest(event: APIGatewayProxyEvent | APIGatewayProxyEventV2): HttpRequest {
   // Normalize headers to lowercase
   const headers: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(event.headers ?? {})) {
-    headers[key.toLowerCase()] = value;
-    headers[key] = value; // Keep original case too
+    headers[key.toLowerCase()] = value ?? undefined;
+    headers[key] = value ?? undefined; // Keep original case too
   }
 
+  // Handle both REST API (v1) and HTTP API (v2) formats
+  const isV1 = isRestApiEvent(event);
+  const method = isV1
+    ? event.httpMethod
+    : (event as APIGatewayProxyEventV2).requestContext.http.method;
+  const path = isV1 ? event.path : (event as APIGatewayProxyEventV2).rawPath;
+
   return {
-    method: event.requestContext.http.method,
-    path: event.rawPath,
+    method,
+    path,
     headers,
     query: event.queryStringParameters ?? {},
     pathParams: (event.pathParameters ?? {}) as Record<string, string>,
@@ -33,13 +53,24 @@ function toHttpRequest(event: APIGatewayProxyEventV2): HttpRequest {
 }
 
 /**
- * Lambda handler entry point
+ * Lambda handler entry point (supports both REST API v1 and HTTP API v2)
  */
 export async function handler(
-  event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2,
   context: Context
-): Promise<APIGatewayProxyResultV2> {
-  console.log(`[CAS] ${event.requestContext.http.method} ${event.rawPath}`);
+): Promise<APIGatewayProxyResult | APIGatewayProxyResultV2> {
+  const isV1 = isRestApiEvent(event);
+  const method = isV1
+    ? event.httpMethod
+    : (event as APIGatewayProxyEventV2).requestContext.http.method;
+  const path = isV1 ? event.path : (event as APIGatewayProxyEventV2).rawPath;
+
+  console.log(`[CAS] ${method} ${path}`);
+
+  // Debug: log request body for POST requests
+  if (method === "POST" || method === "PUT") {
+    console.log(`[CAS] Request body: ${event.body}, isBase64Encoded: ${event.isBase64Encoded}`);
+  }
 
   try {
     const req = toHttpRequest(event);
@@ -48,6 +79,7 @@ export async function handler(
     return {
       statusCode: res.statusCode,
       headers: res.headers,
+
       body: res.body?.toString() ?? "",
       isBase64Encoded: res.isBase64Encoded ?? false,
     };
