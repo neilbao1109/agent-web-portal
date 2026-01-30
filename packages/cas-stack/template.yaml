@@ -37,6 +37,14 @@ Parameters:
     Type: String
     Description: Production UI base URL for Cognito callback/logout (e.g. https://xxx.cloudfront.net). Leave empty on first deploy, then re-deploy with CloudFront URL from outputs.
     Default: ""
+  CustomDomainName:
+    Type: String
+    Description: Custom domain name for CloudFront (e.g. cas-console.example.com). Requires CustomDomainCertificateArn.
+    Default: ""
+  CustomDomainCertificateArn:
+    Type: String
+    Description: ACM certificate ARN for custom domain (must be in us-east-1).
+    Default: ""
 
 Resources:
   # ============================================================================
@@ -404,6 +412,16 @@ Resources:
       DistributionConfig:
         Enabled: true
         DefaultRootObject: index.html
+        Aliases: !If
+          - HasCustomDomain
+          - - !Ref CustomDomainName
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasCustomDomain
+          - AcmCertificateArn: !Ref CustomDomainCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: S3Origin
             DomainName: !GetAtt UiBucket.RegionalDomainName
@@ -562,6 +580,7 @@ Conditions:
   HasGoogleIdP: !And [!Not [!Equals [!Ref GoogleClientId, ""]], !Not [!Equals [!Ref GoogleClientSecret, ""]]]
   HasMicrosoftIdP: !And [!Not [!Equals [!Ref MicrosoftClientId, ""]], !Not [!Equals [!Ref MicrosoftClientSecret, ""]]]
   HasCallbackBaseUrl: !Not [!Equals [!Ref CallbackBaseUrl, ""]]
+  HasCustomDomain: !And [!Not [!Equals [!Ref CustomDomainName, ""]], !Not [!Equals [!Ref CustomDomainCertificateArn, ""]]]
   # Combinations for UserPoolClient
   NoIdP: !And [!Not [!Condition HasGoogleIdP], !Not [!Condition HasMicrosoftIdP]]
   OnlyGoogleIdP: !And [!Condition HasGoogleIdP, !Not [!Condition HasMicrosoftIdP]]
