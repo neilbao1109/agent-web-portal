@@ -16,7 +16,7 @@ export async function apiRequest(
   };
 
   if (token) {
-    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+    (headers as Record<string, string>).Authorization = `Bearer ${token}`;
   }
 
   return fetch(url, {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Card,
@@ -25,6 +25,7 @@ import {
   Chip,
   TextField,
   InputAdornment,
+  LinearProgress,
 } from "@mui/material";
 import {
   Delete as DeleteIcon,
@@ -34,17 +35,50 @@ import {
   ContentCopy as CopyIcon,
   Check as CheckIcon,
   OpenInNew as OpenInNewIcon,
+  Upload as UploadIcon,
+  Download as DownloadIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import { apiRequest, API_URL } from "../utils/api";
 
 interface CasNode {
   key: string;
-  shard: string;
+  realm: string;
   contentType?: string;
   size: number;
   createdAt: number;
   createdBy: string;
+}
+
+// Compute SHA-256 hash of content
+async function computeHash(content: ArrayBuffer): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", content);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Get file extension from content type
+function getExtensionFromContentType(contentType: string): string {
+  const map: Record<string, string> = {
+    "text/plain": ".txt",
+    "text/html": ".html",
+    "text/css": ".css",
+    "text/javascript": ".js",
+    "application/json": ".json",
+    "application/xml": ".xml",
+    "application/pdf": ".pdf",
+    "application/zip": ".zip",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+  };
+  return map[contentType] || "";
 }
 
 function formatDate(timestamp: number): string {
@@ -93,6 +127,15 @@ export default function Nodes() {
 
   // Detail dialog
   const [detailNode, setDetailNode] = useState<CasNode | null>(null);
+
+  // Upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSuccess, setUploadSuccess] = useState("");
+
+  // Download state
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   const fetchNodes = useCallback(async (resetPage = false) => {
     try {
@@ -198,6 +241,106 @@ export default function Nodes() {
     }
   };
 
+  // Upload file handler
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      setError("");
+      setUploadSuccess("");
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        setError("Not authenticated");
+        return;
+      }
+
+      // Read file content
+      const content = await file.arrayBuffer();
+      setUploadProgress(30);
+
+      // Compute hash for the key
+      const hash = await computeHash(content);
+      const key = `sha256-${hash}`;
+      setUploadProgress(50);
+
+      // Upload to CAS
+      const response = await fetch(`${API_URL}/api/cas/@me/chunk/${encodeURIComponent(key)}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: content,
+      });
+
+      setUploadProgress(90);
+
+      if (response.ok) {
+        const data = await response.json();
+        setUploadSuccess(`Uploaded successfully! Key: ${data.key}`);
+        setUploadProgress(100);
+        // Refresh the list
+        fetchNodes(true);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.error || "Failed to upload file");
+      }
+    } catch (err) {
+      setError("Upload failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Download file handler
+  const handleDownload = async (node: CasNode) => {
+    try {
+      setDownloading(node.key);
+      setError("");
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        setError("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/cas/@me/chunk/${encodeURIComponent(node.key)}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        // Use content type to guess extension
+        const ext = getExtensionFromContentType(node.contentType || "application/octet-stream");
+        a.download = `${node.key.slice(0, 16)}${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.error || "Failed to download file");
+      }
+    } catch (err) {
+      setError("Download failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   const truncateKey = (key: string, maxLength = 20) => {
     if (key.length <= maxLength) return key;
     return `${key.slice(0, 12)}...${key.slice(-6)}`;
@@ -254,6 +397,20 @@ export default function Nodes() {
             }}
             sx={{ width: 250 }}
           />
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleFileSelect}
+          />
+          <Button
+            variant="contained"
+            startIcon={uploading ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? "Uploading..." : "Upload"}
+          </Button>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -269,6 +426,21 @@ export default function Nodes() {
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
           {error}
         </Alert>
+      )}
+
+      {uploadSuccess && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setUploadSuccess("")}>
+          {uploadSuccess}
+        </Alert>
+      )}
+
+      {uploading && (
+        <Box sx={{ mb: 3 }}>
+          <LinearProgress variant="determinate" value={uploadProgress} />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            Uploading... {uploadProgress}%
+          </Typography>
+        </Box>
       )}
 
       {nodes.length === 0 && !loading ? (
@@ -344,17 +516,35 @@ export default function Nodes() {
                     </TableCell>
                     <TableCell>{formatDate(node.createdAt)}</TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(node);
-                        }}
-                        title="Delete Node"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      <Tooltip title="Download">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(node);
+                          }}
+                          disabled={downloading === node.key}
+                        >
+                          {downloading === node.key ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <DownloadIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(node);
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -460,14 +650,9 @@ export default function Nodes() {
         <DialogActions>
           {detailNode && (
             <Button
-              startIcon={<OpenInNewIcon />}
-              onClick={() => {
-                // Open in new tab - this would be the actual download URL
-                window.open(
-                  `${API_URL}/api/cas/@me/node/${encodeURIComponent(detailNode.key)}`,
-                  "_blank"
-                );
-              }}
+              startIcon={downloading === detailNode.key ? <CircularProgress size={16} /> : <DownloadIcon />}
+              onClick={() => handleDownload(detailNode)}
+              disabled={downloading === detailNode.key}
             >
               Download
             </Button>
