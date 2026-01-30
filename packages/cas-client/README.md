@@ -1,19 +1,20 @@
-# CAS Client
+# @anthropic/cas-client-nodejs
 
-A streaming-capable client for Content-Addressable Storage (CAS) with local caching support.
+Node.js client for Content-Addressable Storage (CAS) with filesystem-based caching.
 
 ## Features
 
 - **Three authentication modes**: User Token, Agent Token, Ticket
-- **Streaming read/write**: Handle large files without loading into memory
+- **Streaming read/write**: Handle large files using AsyncIterable streams
 - **Client-side chunking**: Automatic chunking based on server-configured threshold
-- **Local caching**: Optional file system cache for frequently accessed data
+- **Local caching**: FileSystemStorageProvider for caching data on disk
 - **Collection support**: Upload directory-like structures with hard link support
+- **Blob references**: Create and parse `CasBlobRef` for MCP/Tool exchange
 
 ## Installation
 
 ```bash
-npm install @agent-web-portal/cas-client
+npm install @anthropic/cas-client-nodejs
 ```
 
 ## Usage
@@ -21,10 +22,13 @@ npm install @agent-web-portal/cas-client
 ### Basic Usage
 
 ```typescript
-import { CasClient } from "@agent-web-portal/cas-client";
+import { CasClient } from "@anthropic/cas-client-nodejs";
 
 // Create client with user token
 const cas = CasClient.fromUserToken("https://cas.example.com", "user_token");
+
+// Or from a #cas-endpoint URL (from CasBlobRef)
+const cas = CasClient.fromEndpoint("https://cas.example.com/api/cas/usr_123/ticket/tkt_abc");
 
 // Or from a CasBlobContext (in Tool handlers)
 const cas = CasClient.fromContext(context.cas);
@@ -33,21 +37,23 @@ const cas = CasClient.fromContext(context.cas);
 const handle = await cas.openFile("sha256:abc123...");
 console.log(handle.size, handle.contentType);
 
-// Stream content
+// Stream content (returns AsyncIterable<Uint8Array>)
 const stream = await handle.stream();
-stream.pipe(fs.createWriteStream("output.png"));
+for await (const chunk of stream) {
+  // process chunk
+}
 
-// Or read to buffer (small files only)
-const buffer = await handle.buffer();
+// Or read to Uint8Array (small files only)
+const bytes = await handle.bytes();
 
 // Upload a file
-const key = await cas.putFile(buffer, "image/png");
+const key = await cas.putFile(bytes, "image/png");
 ```
 
 ### With Local Cache
 
 ```typescript
-import { CasClient, FileSystemStorageProvider } from "@agent-web-portal/cas-client";
+import { CasClient, FileSystemStorageProvider } from "@anthropic/cas-client-nodejs";
 
 const storage = new FileSystemStorageProvider("/tmp/cas-cache");
 const cas = CasClient.fromContext(context.cas, storage);

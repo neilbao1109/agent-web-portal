@@ -6,6 +6,7 @@
 ## 待办事项
 
 ### 阶段一：更新 cas-stack 后端
+
 - [ ] 更新类型定义：scope → shard 重命名，Ticket 新字段
 - [ ] 实现 CAS 三级节点结构（collection/file/chunk）
 - [ ] 更新数据库层支持新 Ticket 结构
@@ -14,6 +15,7 @@
 - [ ] 新增配置查询 API
 
 ### 阶段二：创建 cas-client 包
+
 - [ ] 创建包结构（package.json, tsconfig.json）
 - [ ] 实现 CasClient（三种鉴权模式）
 - [ ] 实现 Client 端分片逻辑
@@ -21,6 +23,7 @@
 - [ ] 实现 LocalStorageProvider（本地缓存）
 
 ### 阶段三：更新 cas-webui
+
 - [ ] 更新 API 调用路径
 - [ ] 更新 Ticket 创建表单
 
@@ -570,12 +573,14 @@ sequenceDiagram
 ## 写入原子性
 
 ### 成功流程
+
 1. Client 上传所有 chunks
 2. Client 上传 file/collection 节点
 3. Server 标记 `ticket.written = rootKey`
 4. 返回成功
 
 ### 失败处理
+
 1. 如果任何步骤失败，Client 可以重试
 2. `ticket.written` 只有在最终节点成功后才设置
 3. 孤立的 chunks 可以通过 GC 清理（基于 ownership 追踪）
@@ -626,10 +631,12 @@ interface CasBlobRef {
 ```
 
 **路径语法：**
+
 - `.` - 表示节点本身（适用于单文件）
 - `./path/to/file` - 相对于 cas-node 的路径（适用于 collection）
 
 **#cas-endpoint 格式：**
+
 ```
 https://cas.example.com/api/cas/{shard}/ticket/{ticketId}
 ```
@@ -647,6 +654,7 @@ User -> MCP Client -> LLM -> call cas_get_ticket tool
 ```
 
 **工作流程：**
+
 1. Agent 预先注入 CAS MCP（包含 `cas_get_ticket`、`cas_upload` 等 tool）
 2. Agent Token 绑定到 CAS MCP，拥有创建 Ticket 的权限
 3. LLM 需要传输 blob 时，先调用 `cas_get_ticket` 获取 ticket
@@ -662,6 +670,7 @@ User -> AWP Client -> (auto inject #cas-endpoint) -> Tool
 ```
 
 **工作流程：**
+
 1. AWP Client 预先绑定 CAS 服务
 2. 通过 auth 接口获取用户的 P256 key pairs
 3. 发送请求时自动为 blob 参数生成 Ticket 并注入 `#cas-endpoint`

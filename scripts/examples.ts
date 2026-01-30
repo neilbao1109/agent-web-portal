@@ -45,7 +45,12 @@ const webuiDir = join(rootDir, "packages/example-webui");
 const EXAMPLES_API_PORT = process.env.EXAMPLES_API_PORT || "3400";
 const EXAMPLES_WEBUI_PORT = process.env.EXAMPLES_WEBUI_PORT || "5173";
 
-function run(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, string>): ChildProcess {
+function run(
+  cwd: string,
+  cmd: string,
+  cmdArgs: string[],
+  env?: Record<string, string>
+): ChildProcess {
   const proc = spawn(cmd, cmdArgs, {
     cwd,
     stdio: "inherit",
@@ -56,7 +61,12 @@ function run(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, s
   return proc;
 }
 
-function runSync(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, string>): boolean {
+function runSync(
+  cwd: string,
+  cmd: string,
+  cmdArgs: string[],
+  env?: Record<string, string>
+): boolean {
   const result = spawnSync(cmd, cmdArgs, {
     cwd,
     stdio: "inherit",
@@ -87,7 +97,9 @@ if (command === "api") {
     const proc = run(webuiDir, "bun", ["run", "dev", "--", "--url", customUrl]);
     proc.on("exit", (code) => process.exit(code ?? 0));
   } else {
-    console.log(`🌐 Starting webui on port ${EXAMPLES_WEBUI_PORT} (API: localhost:${EXAMPLES_API_PORT})...`);
+    console.log(
+      `🌐 Starting webui on port ${EXAMPLES_WEBUI_PORT} (API: localhost:${EXAMPLES_API_PORT})...`
+    );
     const proc = run(webuiDir, "bun", ["run", "dev"]);
     proc.on("exit", (code) => process.exit(code ?? 0));
   }

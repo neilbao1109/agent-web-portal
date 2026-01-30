@@ -1,11 +1,12 @@
 /**
- * CAS Client - Local Storage Provider
+ * CAS Client Node.js - File System Storage Provider
+ *
+ * Local caching implementation using the filesystem
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Readable, Writable } from "node:stream";
-import type { CasRawNode, LocalStorageProvider } from "./types.ts";
+import type { ByteStream, CasRawNode, LocalStorageProvider } from "@anthropic/cas-client-core";
 
 /**
  * File system based local storage provider for caching CAS nodes
@@ -62,13 +63,22 @@ export class FileSystemStorageProvider implements LocalStorageProvider {
   }
 
   /**
-   * Get cached chunk data as stream
+   * Get cached chunk data as async iterable stream
    */
-  async getChunkStream(key: string): Promise<Readable | null> {
+  async getChunkStream(key: string): Promise<ByteStream | null> {
     const p = this.chunkPath(key);
     try {
       await fs.promises.access(p);
-      return fs.createReadStream(p);
+      const nodeStream = fs.createReadStream(p);
+
+      // Convert Node.js Readable to AsyncIterable<Uint8Array>
+      async function* toByteStream(): ByteStream {
+        for await (const chunk of nodeStream) {
+          yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        }
+      }
+
+      return toByteStream();
     } catch {
       return null;
     }
@@ -84,12 +94,12 @@ export class FileSystemStorageProvider implements LocalStorageProvider {
   }
 
   /**
-   * Get writable stream for storing chunk data
+   * Store chunk data
    */
-  putChunkStream(key: string): Writable {
+  async putChunk(key: string, data: Uint8Array): Promise<void> {
     const p = this.chunkPath(key);
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    return fs.createWriteStream(p);
+    await fs.promises.mkdir(path.dirname(p), { recursive: true });
+    await fs.promises.writeFile(p, data);
   }
 
   /**
@@ -97,7 +107,6 @@ export class FileSystemStorageProvider implements LocalStorageProvider {
    */
   async prune(options?: { maxSize?: number; maxAge?: number }): Promise<void> {
     // TODO: Implement LRU or time-based cache eviction
-    // For now, this is a placeholder
     console.log("Cache pruning not yet implemented", options);
   }
 

@@ -148,8 +148,12 @@ export class AuthService {
 
     const ticketId = TokensDb.extractTokenId(ticket.pk);
 
+    // Construct endpoint URL
+    const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.shard}/ticket/${ticketId}`;
+
     return {
       id: ticketId,
+      endpoint,
       expiresAt: new Date(ticket.expiresAt).toISOString(),
       shard: ticket.shard,
       scope: ticket.scope,

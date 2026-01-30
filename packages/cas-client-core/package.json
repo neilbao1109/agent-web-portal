@@ -1,7 +1,7 @@
 {
-  "name": "@anthropic/cas-client-nodejs",
+  "name": "@anthropic/cas-client-core",
   "version": "0.0.1",
-  "description": "CAS client for Node.js with filesystem-based caching",
+  "description": "CAS client core - platform-agnostic types and utilities",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,15 +15,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
-  },
-  "dependencies": {
-    "@anthropic/cas-client-core": "workspace:*"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
-    "@types/node": "^20.10.0"
+    "typescript": "^5.3.0"
   },
   "files": [
     "dist"

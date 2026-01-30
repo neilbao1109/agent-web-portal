@@ -139,14 +139,18 @@ export class AuthMiddleware {
       return null;
     }
 
-    // Parse header: "Bearer xxx" or "Ticket xxx"
+    // Parse header: "Bearer xxx", "Ticket xxx", or "Agent xxx"
     const [scheme, tokenId] = authHeader.split(" ");
     if (!scheme || !tokenId) {
       return null;
     }
 
     const normalizedScheme = scheme.toLowerCase();
-    if (normalizedScheme !== "bearer" && normalizedScheme !== "ticket") {
+    if (
+      normalizedScheme !== "bearer" &&
+      normalizedScheme !== "ticket" &&
+      normalizedScheme !== "agent"
+    ) {
       return null;
     }
 
@@ -166,6 +170,17 @@ export class AuthMiddleware {
   private buildAuthContext(token: Token): AuthContext {
     switch (token.type) {
       case "user":
+        return {
+          token,
+          userId: token.userId,
+          shard: `usr_${token.userId}`,
+          canRead: true,
+          canWrite: true,
+          canIssueTicket: true,
+        };
+
+      case "agent":
+        // Agent tokens inherit all permissions from user
         return {
           token,
           userId: token.userId,

@@ -43,7 +43,12 @@ const webuiDir = join(rootDir, "packages/cas-webui");
 const CAS_API_PORT = process.env.CAS_API_PORT || "3550";
 const CAS_WEBUI_PORT = process.env.CAS_WEBUI_PORT || "5174";
 
-function run(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, string>): ChildProcess {
+function run(
+  cwd: string,
+  cmd: string,
+  cmdArgs: string[],
+  env?: Record<string, string>
+): ChildProcess {
   const proc = spawn(cmd, cmdArgs, {
     cwd,
     stdio: "inherit",
@@ -54,7 +59,12 @@ function run(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, s
   return proc;
 }
 
-function runAndWait(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, string>): Promise<number> {
+function runAndWait(
+  cwd: string,
+  cmd: string,
+  cmdArgs: string[],
+  env?: Record<string, string>
+): Promise<number> {
   return new Promise((resolve) => {
     const proc = run(cwd, cmd, cmdArgs, env);
     proc.on("exit", (code) => {
@@ -63,7 +73,12 @@ function runAndWait(cwd: string, cmd: string, cmdArgs: string[], env?: Record<st
   });
 }
 
-function runSync(cwd: string, cmd: string, cmdArgs: string[], env?: Record<string, string>): boolean {
+function runSync(
+  cwd: string,
+  cmd: string,
+  cmdArgs: string[],
+  env?: Record<string, string>
+): boolean {
   const result = spawnSync(cmd, cmdArgs, {
     cwd,
     stdio: "inherit",
@@ -86,7 +101,9 @@ if (command === "api") {
     const proc = run(webuiDir, "bun", ["run", "dev", "--", "--url", customUrl]);
     proc.on("exit", (code) => process.exit(code ?? 0));
   } else {
-    console.log(`🌐 Starting CAS webui on port ${CAS_WEBUI_PORT} (API: localhost:${CAS_API_PORT})...`);
+    console.log(
+      `🌐 Starting CAS webui on port ${CAS_WEBUI_PORT} (API: localhost:${CAS_API_PORT})...`
+    );
     const proc = run(webuiDir, "bun", ["run", "dev"]);
     proc.on("exit", (code) => process.exit(code ?? 0));
   }

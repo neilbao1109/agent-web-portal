@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "./auth/service.ts";
 import { CasStorage } from "./cas/storage.ts";
 import { AwpPendingAuthStore, AwpPubkeyStore, OwnershipDb, TokensDb } from "./db/index.ts";
+import { McpHandler } from "./mcp/handler.ts";
 import { AuthMiddleware } from "./middleware/auth.ts";
 import type {
   AuthContext,
@@ -70,6 +71,13 @@ const PutCollectionSchema = z.object({
   children: z.record(z.string()),
 });
 
+// Agent Token schema
+const CreateAgentTokenSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  expiresIn: z.number().positive().optional(),
+});
+
 // ============================================================================
 // Response Helpers
 // ============================================================================
@@ -123,6 +131,7 @@ export class Router {
   private ownershipDb: OwnershipDb;
   private awpPendingStore: AwpPendingAuthStore;
   private awpPubkeyStore: AwpPubkeyStore;
+  private mcpHandler: McpHandler;
 
   constructor(config: CasConfig) {
     this.config = config;
@@ -133,6 +142,7 @@ export class Router {
     this.authMiddleware = new AuthMiddleware(config, this.tokensDb, this.awpPubkeyStore);
     this.authService = new AuthService(config, this.tokensDb);
     this.casStorage = new CasStorage(config);
+    this.mcpHandler = new McpHandler(config, loadServerConfig());
   }
 
   /**
@@ -158,6 +168,11 @@ export class Router {
         return this.handleAuth(req);
       }
 
+      // MCP endpoint (requires Agent Token auth)
+      if (req.path === "/mcp" && req.method === "POST") {
+        return this.handleMcp(req);
+      }
+
       // CAS routes (auth required)
       if (req.path.startsWith("/cas/")) {
         return this.handleCas(req);
@@ -173,6 +188,25 @@ export class Router {
       console.error("Router error:", error);
       return errorResponse(500, error.message ?? "Internal server error");
     }
+  }
+
+  // ============================================================================
+  // MCP Route
+  // ============================================================================
+
+  private async handleMcp(req: HttpRequest): Promise<HttpResponse> {
+    // Authenticate - prefer Agent Token but allow User Token too
+    const auth = await this.authMiddleware.authenticate(req);
+    if (!auth) {
+      return errorResponse(401, "Authentication required. Use Agent Token or User Token.");
+    }
+
+    // Must have ticket issuing capability
+    if (!auth.canIssueTicket) {
+      return errorResponse(403, "Agent or User token required for MCP access");
+    }
+
+    return this.mcpHandler.handle(req, auth);
   }
 
   // ============================================================================
@@ -403,8 +437,12 @@ export class Router {
         );
 
         const ticketId = TokensDb.extractTokenId(ticket.pk);
+        // Build endpoint URL for #cas-endpoint
+        const endpoint = `${serverConfig.baseUrl}/api/cas/${ticket.shard}/ticket/${ticketId}`;
+
         return jsonResponse(201, {
           id: ticketId,
+          endpoint,
           expiresAt: new Date(ticket.expiresAt).toISOString(),
           shard: ticket.shard,
           scope: ticket.scope,
@@ -425,6 +463,69 @@ export class Router {
         return jsonResponse(200, { success: true });
       } catch (error: any) {
         return errorResponse(404, error.message ?? "Ticket not found");
+      }
+    }
+
+    // ========================================================================
+    // Agent Token Management Routes
+    // ========================================================================
+
+    // POST /auth/tokens - Create agent token
+    if (req.method === "POST" && path === "/tokens") {
+      const body = this.parseJson(req);
+      const parsed = CreateAgentTokenSchema.safeParse(body);
+      if (!parsed.success) {
+        return errorResponse(400, "Invalid request", parsed.error.issues);
+      }
+
+      try {
+        const serverConfig = loadServerConfig();
+        const token = await this.tokensDb.createAgentToken(
+          auth.userId,
+          parsed.data.name,
+          serverConfig,
+          {
+            description: parsed.data.description,
+            expiresIn: parsed.data.expiresIn,
+          }
+        );
+
+        const tokenId = TokensDb.extractTokenId(token.pk);
+        return jsonResponse(201, {
+          id: tokenId,
+          name: token.name,
+          description: token.description,
+          expiresAt: new Date(token.expiresAt).toISOString(),
+          createdAt: new Date(token.createdAt).toISOString(),
+        });
+      } catch (error: any) {
+        return errorResponse(403, error.message ?? "Cannot create agent token");
+      }
+    }
+
+    // GET /auth/tokens - List agent tokens
+    if (req.method === "GET" && path === "/tokens") {
+      const tokens = await this.tokensDb.listAgentTokensByUser(auth.userId);
+      return jsonResponse(200, {
+        tokens: tokens.map((t) => ({
+          id: TokensDb.extractTokenId(t.pk),
+          name: t.name,
+          description: t.description,
+          expiresAt: new Date(t.expiresAt).toISOString(),
+          createdAt: new Date(t.createdAt).toISOString(),
+        })),
+      });
+    }
+
+    // DELETE /auth/tokens/:id - Revoke agent token
+    const agentTokenMatch = path.match(/^\/tokens\/([^/]+)$/);
+    if (req.method === "DELETE" && agentTokenMatch) {
+      const tokenId = agentTokenMatch[1]!;
+      try {
+        await this.tokensDb.revokeAgentToken(auth.userId, tokenId);
+        return jsonResponse(200, { success: true });
+      } catch (error: any) {
+        return errorResponse(404, error.message ?? "Agent token not found");
       }
     }
 

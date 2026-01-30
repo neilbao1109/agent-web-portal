@@ -6,12 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { type LlmAdapter, OpenAIAdapter } from "../core/llm";
-import {
-  type Endpoint,
-  type Model,
-  type ModelWithEndpoint,
-  modelConfigStorage,
-} from "../storage";
+import { type Endpoint, type Model, type ModelWithEndpoint, modelConfigStorage } from "../storage";
 
 export interface UseModelConfigResult {
   // Endpoints

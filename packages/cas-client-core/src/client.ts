@@ -1,25 +1,36 @@
 /**
- * CAS Client - Main Client Implementation
+ * CAS Client Core - Main Client Implementation
+ *
+ * Platform-agnostic CAS client using fetch API and AsyncIterable streams
  */
 
-import { PassThrough, Readable } from "node:stream";
-import { computeKey, needsChunking, splitIntoChunks, streamToBuffer } from "./chunker.ts";
-import { CasFileHandleImpl } from "./file-handle.ts";
+import { buildEndpoint, createBlobRef, parseEndpoint, resolvePathRaw } from "./blob-ref.ts";
+import { computeKey } from "./hash.ts";
+import { collectBytes, concatStreamFactories, needsChunking, splitIntoChunks } from "./stream.ts";
 import type {
+  ByteStream,
   CasAuth,
   CasBlobContext,
+  CasBlobRef,
   CasClientConfig,
   CasConfigResponse,
   CasFileHandle,
   CasNode,
+  CasRawCollectionNode,
   CasRawFileNode,
   CasRawNode,
   LocalStorageProvider,
+  PathResolution,
   PathResolver,
 } from "./types.ts";
 
 /**
  * CAS Client for interacting with CAS storage
+ *
+ * Platform-agnostic implementation using:
+ * - fetch API for HTTP
+ * - Web Crypto API for hashing
+ * - AsyncIterable<Uint8Array> for streaming
  */
 export class CasClient {
   private endpoint: string;
@@ -28,47 +39,107 @@ export class CasClient {
   private chunkThreshold: number;
   private shard?: string;
 
-  constructor(config: CasClientConfig) {
-    this.endpoint = config.endpoint.replace(/\/$/, ""); // Remove trailing slash
+  constructor(config: CasClientConfig & { storage?: LocalStorageProvider; shard?: string }) {
+    this.endpoint = config.endpoint.replace(/\/$/, "");
     this.auth = config.auth;
     this.storage = config.storage;
     this.chunkThreshold = config.chunkThreshold ?? 1048576; // Default 1MB
+    this.shard = config.shard;
   }
 
   // ============================================================================
   // Static Factory Methods
   // ============================================================================
 
-  static fromUserToken(endpoint: string, token: string): CasClient {
+  static fromUserToken(endpoint: string, token: string, storage?: LocalStorageProvider): CasClient {
     return new CasClient({
       endpoint,
       auth: { type: "user", token },
+      storage,
     });
   }
 
-  static fromAgentToken(endpoint: string, token: string): CasClient {
+  static fromAgentToken(
+    endpoint: string,
+    token: string,
+    storage?: LocalStorageProvider
+  ): CasClient {
     return new CasClient({
       endpoint,
       auth: { type: "agent", token },
+      storage,
     });
   }
 
-  static fromTicket(endpoint: string, ticketId: string): CasClient {
+  static fromTicket(endpoint: string, ticketId: string, storage?: LocalStorageProvider): CasClient {
     return new CasClient({
       endpoint,
       auth: { type: "ticket", id: ticketId },
+      storage,
     });
   }
 
   static fromContext(context: CasBlobContext, storage?: LocalStorageProvider): CasClient {
-    const client = new CasClient({
+    return new CasClient({
       endpoint: context.endpoint,
       auth: { type: "ticket", id: context.ticket },
       storage,
       chunkThreshold: context.config.chunkThreshold,
+      shard: context.shard,
     });
-    client.shard = context.shard;
-    return client;
+  }
+
+  /**
+   * Create a CasClient from a #cas-endpoint URL
+   *
+   * @param endpointUrl - Full endpoint URL: https://host/api/cas/{shard}/ticket/{ticketId}
+   * @param storage - Optional local storage provider for caching
+   */
+  static fromEndpoint(endpointUrl: string, storage?: LocalStorageProvider): CasClient {
+    const { baseUrl, shard, ticketId } = parseEndpoint(endpointUrl);
+    return new CasClient({
+      endpoint: baseUrl,
+      auth: { type: "ticket", id: ticketId },
+      storage,
+      shard,
+    });
+  }
+
+  // ============================================================================
+  // Blob Reference Helpers
+  // ============================================================================
+
+  /**
+   * Create a blob reference for a node
+   */
+  createBlobRef(casNode: string, path: string = ".", pathKey: string = "path"): CasBlobRef {
+    if (this.auth.type !== "ticket") {
+      throw new Error("Blob refs can only be created with ticket auth");
+    }
+    const shard = this.shard ?? "@me";
+    const endpointUrl = buildEndpoint(this.endpoint, shard, this.auth.id);
+    return createBlobRef(endpointUrl, casNode, path, pathKey);
+  }
+
+  /**
+   * Resolve a path within a blob reference to get the target key
+   */
+  async resolveRef(ref: CasBlobRef, pathKey: string = "path"): Promise<string> {
+    const path = ref[pathKey];
+    if (!path) {
+      throw new Error(`Path key "${pathKey}" not found in blob ref`);
+    }
+    return this.resolvePath(ref["cas-node"], path);
+  }
+
+  /**
+   * Resolve a path within a node to get the target key
+   */
+  async resolvePath(rootKey: string, path: string): Promise<string> {
+    return resolvePathRaw(rootKey, path, async (key) => {
+      const node = await this.getRawNode(key);
+      return node.kind === "collection" ? (node as CasRawCollectionNode) : null;
+    });
   }
 
   // ============================================================================
@@ -90,7 +161,6 @@ export class CasClient {
     if (this.shard) {
       return this.shard;
     }
-    // For user/agent tokens, use @me which server will resolve
     return "@me";
   }
 
@@ -98,9 +168,6 @@ export class CasClient {
   // Configuration
   // ============================================================================
 
-  /**
-   * Get server configuration
-   */
   async getConfig(): Promise<CasConfigResponse> {
     const res = await fetch(`${this.endpoint}/cas/config`);
     if (!res.ok) {
@@ -176,9 +243,17 @@ export class CasClient {
   }
 
   /**
-   * Get chunk data as a stream
+   * Open a file by path within a collection
    */
-  async getChunkStream(key: string): Promise<Readable> {
+  async openFileByPath(rootKey: string, path: string): Promise<CasFileHandle> {
+    const targetKey = await this.resolvePath(rootKey, path);
+    return this.openFile(targetKey);
+  }
+
+  /**
+   * Get chunk data as an async iterable stream
+   */
+  async getChunkStream(key: string): Promise<ByteStream> {
     // Check local cache first
     if (this.storage) {
       const cached = await this.storage.getChunkStream(key);
@@ -196,26 +271,52 @@ export class CasClient {
       throw new Error(`Failed to get chunk: ${res.status}`);
     }
 
-    // Convert web stream to Node stream
     const webStream = res.body;
     if (!webStream) {
       throw new Error("No response body");
     }
 
-    const nodeStream = Readable.fromWeb(webStream as any);
+    // Convert Web ReadableStream to AsyncIterable
+    const reader = webStream.getReader();
 
-    // Optionally cache while streaming
-    if (this.storage) {
-      const passThrough = new PassThrough();
-      const cacheStream = this.storage.putChunkStream(key);
-
-      nodeStream.pipe(cacheStream);
-      nodeStream.pipe(passThrough);
-
-      return passThrough;
+    async function* streamToAsyncIterable(): ByteStream {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          yield value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
 
-    return nodeStream;
+    const stream = streamToAsyncIterable();
+
+    // Cache while streaming if storage is available
+    if (this.storage) {
+      const chunks: Uint8Array[] = [];
+      const storage = this.storage;
+
+      async function* cacheWhileStreaming(): ByteStream {
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+          yield chunk;
+        }
+        // After streaming completes, save to cache
+        const fullData = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
+        let offset = 0;
+        for (const c of chunks) {
+          fullData.set(c, offset);
+          offset += c.length;
+        }
+        await storage.putChunk(key, fullData);
+      }
+
+      return cacheWhileStreaming();
+    }
+
+    return stream;
   }
 
   // ============================================================================
@@ -225,21 +326,19 @@ export class CasClient {
   /**
    * Upload a file (handles chunking automatically)
    */
-  async putFile(content: Buffer | Readable, contentType: string): Promise<string> {
-    // Convert stream to buffer if needed
-    const buffer = Buffer.isBuffer(content) ? content : await streamToBuffer(content);
-
-    const _shard = await this.getShard();
+  async putFile(content: Uint8Array | ByteStream, contentType: string): Promise<string> {
+    // Collect stream to bytes if needed
+    const bytes = content instanceof Uint8Array ? content : await collectBytes(content);
 
     // Check if chunking is needed
-    if (!needsChunking(buffer.length, this.chunkThreshold)) {
+    if (!needsChunking(bytes.length, this.chunkThreshold)) {
       // Small file: upload as single chunk, then create file node
-      const chunkKey = await this.uploadChunk(buffer);
-      return this.createFileNode([chunkKey], contentType, buffer.length);
+      const chunkKey = await this.uploadChunk(bytes);
+      return this.createFileNode([chunkKey], contentType, bytes.length);
     }
 
     // Large file: split into chunks and upload
-    const chunks = splitIntoChunks(buffer, this.chunkThreshold);
+    const chunks = splitIntoChunks(bytes, this.chunkThreshold);
     const chunkKeys: string[] = [];
 
     for (const chunk of chunks) {
@@ -247,14 +346,14 @@ export class CasClient {
       chunkKeys.push(key);
     }
 
-    return this.createFileNode(chunkKeys, contentType, buffer.length);
+    return this.createFileNode(chunkKeys, contentType, bytes.length);
   }
 
   /**
    * Upload a single chunk
    */
-  private async uploadChunk(content: Buffer): Promise<string> {
-    const key = computeKey(content);
+  private async uploadChunk(content: Uint8Array): Promise<string> {
+    const key = await computeKey(content);
     const shard = await this.getShard();
 
     const res = await fetch(`${this.endpoint}/cas/${shard}/chunk/${encodeURIComponent(key)}`, {
@@ -263,7 +362,7 @@ export class CasClient {
         Authorization: this.getAuthHeader(),
         "Content-Type": "application/octet-stream",
       },
-      body: content,
+      body: content as unknown as BodyInit,
     });
 
     if (!res.ok) {
@@ -281,7 +380,7 @@ export class CasClient {
   private async createFileNode(
     chunks: string[],
     contentType: string,
-    totalSize: number
+    _totalSize: number
   ): Promise<string> {
     const shard = await this.getShard();
 
@@ -325,27 +424,24 @@ export class CasClient {
 
     switch (resolution.type) {
       case "file": {
-        // Get content
-        let content: Buffer;
-        if (Buffer.isBuffer(resolution.content)) {
+        let content: Uint8Array;
+        if (resolution.content instanceof Uint8Array) {
           content = resolution.content;
         } else if (typeof resolution.content === "function") {
-          const stream = resolution.content();
-          content = await streamToBuffer(stream);
+          const stream = await resolution.content();
+          content = await collectBytes(stream);
         } else {
-          content = await streamToBuffer(resolution.content);
+          content = await collectBytes(resolution.content);
         }
 
         return this.putFile(content, resolution.contentType);
       }
 
       case "link": {
-        // Return existing key directly
         return resolution.target;
       }
 
       case "collection": {
-        // Build children first
         const children: Record<string, string> = {};
 
         for (const name of resolution.children) {
@@ -356,7 +452,6 @@ export class CasClient {
           }
         }
 
-        // Upload collection node
         return this.createCollectionNode(children);
       }
     }
@@ -384,5 +479,58 @@ export class CasClient {
 
     const result = (await res.json()) as { key: string };
     return result.key;
+  }
+}
+
+/**
+ * File handle implementation using platform-agnostic streams
+ */
+class CasFileHandleImpl implements CasFileHandle {
+  constructor(
+    private node: CasRawFileNode,
+    private getChunkStreamFn: (key: string) => Promise<ByteStream>
+  ) {}
+
+  get key(): string {
+    return this.node.key;
+  }
+
+  get size(): number {
+    return this.node.size;
+  }
+
+  get contentType(): string {
+    return this.node.contentType;
+  }
+
+  async stream(): Promise<ByteStream> {
+    const { chunks } = this.node;
+
+    if (chunks.length === 0) {
+      return (async function* () {})();
+    }
+
+    if (chunks.length === 1) {
+      return this.getChunkStreamFn(chunks[0]!);
+    }
+
+    // Multiple chunks: concatenate streams lazily
+    const getChunk = this.getChunkStreamFn;
+    return concatStreamFactories(chunks.map((key) => () => getChunk(key)));
+  }
+
+  async bytes(): Promise<Uint8Array> {
+    const stream = await this.stream();
+    return collectBytes(stream);
+  }
+
+  async slice(start: number, end: number): Promise<ByteStream> {
+    // Simple implementation: read all and slice
+    // TODO: Optimize by tracking chunk offsets
+    const full = await this.bytes();
+    const sliced = full.slice(start, end);
+    return (async function* () {
+      yield sliced;
+    })();
   }
 }

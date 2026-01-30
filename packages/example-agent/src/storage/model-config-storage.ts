@@ -103,7 +103,9 @@ export class ModelConfigStorage {
 
   // ============ Endpoint Operations ============
 
-  async saveEndpoint(endpoint: Omit<Endpoint, "createdAt" | "updatedAt"> & { createdAt?: number }): Promise<Endpoint> {
+  async saveEndpoint(
+    endpoint: Omit<Endpoint, "createdAt" | "updatedAt"> & { createdAt?: number }
+  ): Promise<Endpoint> {
     const db = await this.getDb();
     const now = Date.now();
     const fullEndpoint: Endpoint = {
@@ -164,7 +166,9 @@ export class ModelConfigStorage {
 
   // ============ Model Operations ============
 
-  async saveModel(model: Omit<Model, "createdAt" | "updatedAt"> & { createdAt?: number }): Promise<Model> {
+  async saveModel(
+    model: Omit<Model, "createdAt" | "updatedAt"> & { createdAt?: number }
+  ): Promise<Model> {
     const db = await this.getDb();
     const now = Date.now();
     const fullModel: Model = {

@@ -8,9 +8,11 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type {
+  AgentToken,
   CasConfig,
   CasServerConfig,
   Ticket,
@@ -31,6 +33,10 @@ function generateId(prefix: string): string {
 
 export function generateUserTokenId(): string {
   return generateId("usr");
+}
+
+export function generateAgentTokenId(): string {
+  return generateId("agt");
 }
 
 export function generateTicketId(): string {
@@ -123,7 +129,10 @@ export class TokensDb {
   ): Promise<Ticket> {
     const ticketId = generateTicketId();
     const now = Date.now();
-    const expiresIn = options?.expiresIn ?? 3600; // default 1 hour
+
+    // Default 1 hour, capped at maxTicketTtl
+    const requestedExpiresIn = options?.expiresIn ?? 3600;
+    const expiresIn = Math.min(requestedExpiresIn, serverConfig.maxTicketTtl);
     const expiresAt = now + expiresIn * 1000;
 
     const ticket: Ticket = {
@@ -217,16 +226,102 @@ export class TokensDb {
       return token.userId === userId;
     }
 
+    if (token.type === "agent") {
+      return token.userId === userId;
+    }
+
     if (token.type === "ticket") {
       // Check if the ticket was issued by this user
       const issuer = await this.getToken(token.issuerId);
       if (!issuer) return false;
-      if (issuer.type === "user") {
+      if (issuer.type === "user" || issuer.type === "agent") {
         return issuer.userId === userId;
       }
     }
 
     return false;
+  }
+
+  // ============================================================================
+  // Agent Token Operations
+  // ============================================================================
+
+  /**
+   * Create an agent token
+   */
+  async createAgentToken(
+    userId: string,
+    name: string,
+    serverConfig: CasServerConfig,
+    options?: {
+      description?: string;
+      expiresIn?: number;
+    }
+  ): Promise<AgentToken> {
+    const tokenId = generateAgentTokenId();
+    const now = Date.now();
+
+    // Default 30 days, capped at maxAgentTokenTtl
+    const requestedExpiresIn = options?.expiresIn ?? 30 * 24 * 60 * 60; // 30 days
+    const expiresIn = Math.min(requestedExpiresIn, serverConfig.maxAgentTokenTtl);
+    const expiresAt = now + expiresIn * 1000;
+
+    const token: AgentToken = {
+      pk: `token#${tokenId}`,
+      type: "agent",
+      userId,
+      name,
+      description: options?.description,
+      createdAt: now,
+      expiresAt,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          ...token,
+          // Add GSI key for listing by user
+          gsi1pk: `user#${userId}`,
+          gsi1sk: `agent#${tokenId}`,
+        },
+      })
+    );
+
+    return token;
+  }
+
+  /**
+   * List agent tokens for a user
+   */
+  async listAgentTokensByUser(userId: string): Promise<AgentToken[]> {
+    const result = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: "gsi1",
+        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": `user#${userId}`,
+          ":sk": "agent#",
+        },
+      })
+    );
+
+    const now = Date.now();
+    return (result.Items ?? []).filter((item) => item.expiresAt > now) as AgentToken[];
+  }
+
+  /**
+   * Revoke an agent token
+   */
+  async revokeAgentToken(userId: string, tokenId: string): Promise<void> {
+    // Verify ownership first
+    const token = await this.getToken(tokenId);
+    if (!token || token.type !== "agent" || token.userId !== userId) {
+      throw new Error("Agent token not found or access denied");
+    }
+
+    await this.deleteToken(tokenId);
   }
 
   /**

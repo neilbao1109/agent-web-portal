@@ -210,10 +210,10 @@ export default function Nodes() {
 
   const filteredNodes = searchQuery
     ? nodes.filter(
-        (node) =>
-          node.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          node.contentType.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      (node) =>
+        node.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (node.contentType?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+    )
     : nodes;
 
   if (loading && nodes.length === 0) {
@@ -338,9 +338,9 @@ export default function Nodes() {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={node.contentType}
+                        label={node.contentType ?? "unknown"}
                         size="small"
-                        color={getContentTypeColor(node.contentType)}
+                        color={getContentTypeColor(node.contentType ?? "")}
                         variant="outlined"
                       />
                     </TableCell>
@@ -424,9 +424,9 @@ export default function Nodes() {
                     Content Type
                   </Typography>
                   <Chip
-                    label={detailNode.contentType}
+                    label={detailNode.contentType ?? "unknown"}
                     size="small"
-                    color={getContentTypeColor(detailNode.contentType)}
+                    color={getContentTypeColor(detailNode.contentType ?? "")}
                   />
                 </Box>
                 <Box>

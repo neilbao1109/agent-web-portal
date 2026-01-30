@@ -67,13 +67,30 @@
       },
     },
     "packages/cas-client": {
-      "name": "@agent-web-portal/cas-client",
+      "name": "@anthropic/cas-client-nodejs",
       "version": "0.0.1",
       "dependencies": {
-        "@agent-web-portal/cas-stack": "workspace:*",
+        "@anthropic/cas-client-core": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^20.10.0",
+        "typescript": "^5.3.0",
+      },
+    },
+    "packages/cas-client-browser": {
+      "name": "@anthropic/cas-client-browser",
+      "version": "0.0.1",
+      "dependencies": {
+        "@anthropic/cas-client-core": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.3.0",
+      },
+    },
+    "packages/cas-client-core": {
+      "name": "@anthropic/cas-client-core",
+      "version": "0.0.1",
+      "devDependencies": {
         "typescript": "^5.3.0",
       },
     },
@@ -311,8 +328,6 @@
 
     "@agent-web-portal/aws-lambda": ["@agent-web-portal/aws-lambda@workspace:packages/aws-lambda"],
 
-    "@agent-web-portal/cas-client": ["@agent-web-portal/cas-client@workspace:packages/cas-client"],
-
     "@agent-web-portal/cas-stack": ["@agent-web-portal/cas-stack@workspace:packages/cas-stack"],
 
     "@agent-web-portal/cas-webui": ["@agent-web-portal/cas-webui@workspace:packages/cas-webui"],
@@ -334,6 +349,12 @@
     "@agent-web-portal/example-stack": ["@agent-web-portal/example-stack@workspace:packages/example-stack"],
 
     "@agent-web-portal/example-webui": ["@agent-web-portal/example-webui@workspace:packages/example-webui"],
+
+    "@anthropic/cas-client-browser": ["@anthropic/cas-client-browser@workspace:packages/cas-client-browser"],
+
+    "@anthropic/cas-client-core": ["@anthropic/cas-client-core@workspace:packages/cas-client-core"],
+
+    "@anthropic/cas-client-nodejs": ["@anthropic/cas-client-nodejs@workspace:packages/cas-client"],
 
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 
@@ -1393,8 +1414,6 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
-    "@agent-web-portal/cas-client/@types/node": ["@types/node@20.19.30", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-WJtwWJu7UdlvzEAUm484QNg5eAoq5QR08KDNx7g45Usrs2NtOPiX8ugDqmKdXkyL03rBqU5dYNYVQetEpBHq2g=="],
-
     "@agent-web-portal/cas-webui/@types/bun": ["@types/bun@1.3.7", "", { "dependencies": { "bun-types": "1.3.7" } }, "sha512-lmNuMda+Z9b7tmhA0tohwy8ZWFSnmQm1UDWXtH5r9F7wZCfkeO3Jx7wKQ1EOiKq43yHts7ky6r8SDJQWRNupkA=="],
 
     "@agent-web-portal/client/@types/bun": ["@types/bun@1.3.7", "", { "dependencies": { "bun-types": "1.3.7" } }, "sha512-lmNuMda+Z9b7tmhA0tohwy8ZWFSnmQm1UDWXtH5r9F7wZCfkeO3Jx7wKQ1EOiKq43yHts7ky6r8SDJQWRNupkA=="],
@@ -1430,6 +1449,8 @@
     "@agent-web-portal/example-stack/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
 
     "@agent-web-portal/example-webui/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
+
+    "@anthropic/cas-client-nodejs/@types/node": ["@types/node@20.19.30", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-WJtwWJu7UdlvzEAUm484QNg5eAoq5QR08KDNx7g45Usrs2NtOPiX8ugDqmKdXkyL03rBqU5dYNYVQetEpBHq2g=="],
 
     "@aws-crypto/sha1-browser/@smithy/util-utf8": ["@smithy/util-utf8@2.3.0", "", { "dependencies": { "@smithy/util-buffer-from": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A=="],
 

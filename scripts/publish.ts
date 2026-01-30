@@ -314,16 +314,16 @@ async function main() {
   console.log("");
 
   // Filter packages that need publishing
-  const toPublish = force
-    ? sorted
-    : sorted.filter((p) => versions.get(p.name)?.needsPublish);
+  const toPublish = force ? sorted : sorted.filter((p) => versions.get(p.name)?.needsPublish);
 
   if (toPublish.length === 0) {
     success("All packages are up to date. Nothing to prepare.\n");
     return;
   }
 
-  log(`Will prepare ${toPublish.length} package(s): ${toPublish.map((p) => basename(p.path)).join(", ")}\n`);
+  log(
+    `Will prepare ${toPublish.length} package(s): ${toPublish.map((p) => basename(p.path)).join(", ")}\n`
+  );
 
   // Prepare publish directory
   log(`Preparing publish directory: ${PUBLISH_DIR}`);
@@ -345,9 +345,9 @@ async function main() {
   // Generate platform-specific publish script
   const isWindows = process.platform === "win32";
   const scriptPath = join(PUBLISH_DIR, isWindows ? "publish.ps1" : "publish.sh");
-  
+
   let scriptContent: string;
-  
+
   if (isWindows) {
     // PowerShell script
     const commands = toPublish.map((pkg, i) => {
@@ -413,22 +413,22 @@ echo ""
   }
 
   writeFileSync(scriptPath, scriptContent);
-  
+
   console.log("\n");
   log("Preparation Complete!");
   log("=====================\n");
-  
+
   success(`Publish script generated: ${scriptPath}\n`);
-  
+
   console.log("Run the following command to publish:\n");
   if (isWindows) {
     console.log(`  powershell -ExecutionPolicy Bypass -File ".publish\\publish.ps1"\n`);
   } else {
     console.log(`  bash .publish/publish.sh\n`);
   }
-  
+
   warn("Each publish may open a browser for OTP verification.\n");
-  
+
   log("After publishing, clean up with:");
   console.log(isWindows ? "  rmdir /s /q .publish\n" : "  rm -rf .publish\n");
 }

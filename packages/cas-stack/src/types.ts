@@ -6,7 +6,7 @@
 // Token Types
 // ============================================================================
 
-export type TokenType = "user" | "ticket";
+export type TokenType = "user" | "agent" | "ticket";
 
 export interface BaseToken {
   pk: string; // token#{id}
@@ -19,6 +19,17 @@ export interface UserToken extends BaseToken {
   type: "user";
   userId: string;
   refreshToken?: string;
+}
+
+/**
+ * Agent Token - long-lived token for AI agents
+ * Inherits all permissions from the creating user
+ */
+export interface AgentToken extends BaseToken {
+  type: "agent";
+  userId: string; // owner user ID
+  name: string; // human-readable name
+  description?: string;
 }
 
 /**
@@ -46,7 +57,7 @@ export interface Ticket extends BaseToken {
   };
 }
 
-export type Token = UserToken | Ticket;
+export type Token = UserToken | AgentToken | Ticket;
 
 export interface TokenPermissions {
   read: boolean;
@@ -83,6 +94,40 @@ export interface RefreshResponse {
   expiresAt: string;
 }
 
+// ============================================================================
+// Agent Token Request/Response Types
+// ============================================================================
+
+export interface CreateAgentTokenRequest {
+  name: string;
+  description?: string;
+  expiresIn?: number; // seconds, default 30 days (2592000)
+}
+
+export interface CreateAgentTokenResponse {
+  id: string;
+  name: string;
+  description?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface AgentTokenInfo {
+  id: string;
+  name: string;
+  description?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ListAgentTokensResponse {
+  tokens: AgentTokenInfo[];
+}
+
+// ============================================================================
+// Ticket Request/Response Types
+// ============================================================================
+
 export interface CreateTicketRequest {
   scope: string | string[]; // DAG root keys to allow access
   writable?: WritableConfig; // write permission config
@@ -91,6 +136,7 @@ export interface CreateTicketRequest {
 
 export interface CreateTicketResponse {
   id: string;
+  endpoint: string; // Full endpoint URL for #cas-endpoint
   expiresAt: string;
   shard: string;
   scope: string | string[];
@@ -255,6 +301,9 @@ export interface CasServerConfig {
   chunkThreshold: number; // default 1MB
   maxCollectionChildren: number; // default 10000
   maxPayloadSize: number; // default 10MB
+  maxTicketTtl: number; // max ticket TTL in seconds, default 86400 (24h)
+  maxAgentTokenTtl: number; // max agent token TTL in seconds, default 2592000 (30d)
+  baseUrl: string; // Base URL for constructing endpoint URLs
 }
 
 export interface CasConfig {
@@ -273,6 +322,9 @@ export function loadServerConfig(): CasServerConfig {
     chunkThreshold: parseInt(process.env.CAS_CHUNK_THRESHOLD ?? "1048576", 10), // 1MB
     maxCollectionChildren: parseInt(process.env.CAS_MAX_COLLECTION_CHILDREN ?? "10000", 10),
     maxPayloadSize: parseInt(process.env.CAS_MAX_PAYLOAD_SIZE ?? "10485760", 10), // 10MB
+    maxTicketTtl: parseInt(process.env.CAS_MAX_TICKET_TTL ?? "86400", 10), // 24 hours
+    maxAgentTokenTtl: parseInt(process.env.CAS_MAX_AGENT_TOKEN_TTL ?? "2592000", 10), // 30 days
+    baseUrl: process.env.CAS_BASE_URL ?? "http://localhost:3000",
   };
 }
 
