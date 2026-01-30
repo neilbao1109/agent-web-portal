@@ -82,6 +82,27 @@ bun run dev
 # Server runs at http://localhost:3500
 ```
 
+### Local DynamoDB (Docker)
+
+For persistent local storage, use DynamoDB Local in Docker:
+
+```bash
+# From repo root: start DynamoDB Local
+docker compose up -d dynamodb
+
+# Create CAS tables in local DynamoDB
+cd packages/cas-stack && bun run create-local-tables
+
+# In project root .env, add:
+#   DYNAMODB_ENDPOINT=http://localhost:8000
+#   TOKENS_TABLE=awp-cas-tokens
+#   CAS_REALM_TABLE=awp-cas-cas-realm
+#   CAS_DAG_TABLE=awp-cas-cas-dag
+
+# Start CAS server (will use DynamoDB when DYNAMODB_ENDPOINT is set)
+bun run dev
+```
+
 ### Deploy to AWS
 
 ```bash

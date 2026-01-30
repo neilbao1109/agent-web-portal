@@ -2,7 +2,6 @@
  * CAS Stack - Database Operations for CAS Ownership
  */
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   BatchGetCommand,
   DeleteCommand,
@@ -11,6 +10,7 @@ import {
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createDynamoDBClient } from "./client.ts";
 import type { CasConfig, CasOwnership } from "../types.ts";
 
 export class OwnershipDb {
@@ -21,7 +21,7 @@ export class OwnershipDb {
     this.tableName = config.casRealmTable;
     this.client =
       client ??
-      DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+      DynamoDBDocumentClient.from(createDynamoDBClient(), {
         marshallOptions: { removeUndefinedValues: true },
       });
   }
@@ -189,6 +189,30 @@ export class OwnershipDb {
     const nextKey = result.LastEvaluatedKey?.key as string | undefined;
 
     return { nodes, nextKey };
+  }
+
+  /**
+   * List nodes for a realm (same shape as MemoryOwnershipDb for server compatibility)
+   */
+  async listNodes(
+    realm: string,
+    limit: number = 10,
+    startKey?: string
+  ): Promise<{ nodes: CasOwnership[]; nextKey?: string; total: number }> {
+    const out = await this.listOwnership(realm, limit, startKey);
+    return {
+      nodes: out.nodes,
+      nextKey: out.nextKey,
+      total: out.nodes.length,
+    };
+  }
+
+  /**
+   * Delete ownership (same shape as MemoryOwnershipDb for server compatibility)
+   */
+  async deleteOwnership(realm: string, casKey: string): Promise<boolean> {
+    await this.removeOwnership(realm, casKey);
+    return true;
   }
 
   /**

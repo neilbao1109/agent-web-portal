@@ -20,6 +20,18 @@ import {
 } from "@agent-web-portal/auth";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { CasDagNode, CasOwnership, Ticket, Token, UserToken } from "./src/types.ts";
+import {
+  AwpPendingAuthStore,
+  AwpPubkeyStore,
+  DagDb,
+  OwnershipDb,
+  TokensDb,
+} from "./src/db/index.ts";
+import { loadConfig, loadServerConfig } from "./src/types.ts";
+
+function tokenIdFromPk(pk: string): string {
+  return pk.replace("token#", "");
+}
 
 // ============================================================================
 // In-Memory Storage
@@ -394,6 +406,62 @@ class MemoryAgentTokensDb {
   }
 }
 
+/** Adapter: TokensDb agent-token API → same shape as MemoryAgentTokensDb for server routes */
+interface AgentTokenRecord {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+function createAgentTokensDbAdapter(
+  tokensDb: TokensDb,
+  serverConfig: ReturnType<typeof loadServerConfig>
+): {
+  listByUser(userId: string): Promise<AgentTokenRecord[]>;
+  create(
+    userId: string,
+    name: string,
+    options?: { description?: string; expiresIn?: number }
+  ): Promise<AgentTokenRecord>;
+  revoke(userId: string, tokenId: string): Promise<boolean>;
+} {
+  return {
+    async listByUser(userId: string) {
+      const list = await tokensDb.listAgentTokensByUser(userId);
+      return list.map((t) => ({
+        id: tokenIdFromPk(t.pk),
+        userId: t.userId,
+        name: t.name,
+        description: t.description,
+        createdAt: t.createdAt,
+        expiresAt: t.expiresAt,
+      }));
+    },
+    async create(userId: string, name: string, options?: { description?: string; expiresIn?: number }) {
+      const t = await tokensDb.createAgentToken(userId, name, serverConfig, options);
+      return {
+        id: tokenIdFromPk(t.pk),
+        userId: t.userId,
+        name: t.name,
+        description: t.description,
+        createdAt: t.createdAt,
+        expiresAt: t.expiresAt,
+      };
+    },
+    async revoke(userId: string, tokenId: string) {
+      try {
+        await tokensDb.revokeAgentToken(userId, tokenId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
 // ============================================================================
 // Cognito JWT Verifier (for cas-webui integration)
 // ============================================================================
@@ -454,16 +522,24 @@ async function verifyCognitoToken(token: string): Promise<CognitoTokenPayload | 
 }
 
 // ============================================================================
-// Local Router
+// Local Router - use DynamoDB when DYNAMODB_ENDPOINT is set (e.g. local Docker)
 // ============================================================================
 
-const tokensDb = new MemoryTokensDb();
-const ownershipDb = new MemoryOwnershipDb();
-const dagDb = new MemoryDagDb();
-const casStorage = new MemoryCasStorage();
-const pendingAuthStore = new MemoryAwpPendingAuthStore();
-const pubkeyStore = new MemoryAwpPubkeyStore();
-const agentTokensDb = new MemoryAgentTokensDb();
+const useDynamo = !!process.env.DYNAMODB_ENDPOINT;
+
+const tokensDb = useDynamo
+  ? new TokensDb(loadConfig())
+  : new MemoryTokensDb();
+const ownershipDb = useDynamo ? new OwnershipDb(loadConfig()) : new MemoryOwnershipDb();
+const dagDb = useDynamo ? new DagDb(loadConfig()) : new MemoryDagDb();
+const casStorage = new MemoryCasStorage(); // CAS blob storage stays in-memory for local
+const pendingAuthStore = useDynamo
+  ? new AwpPendingAuthStore(loadConfig())
+  : new MemoryAwpPendingAuthStore();
+const pubkeyStore = useDynamo ? new AwpPubkeyStore(loadConfig()) : new MemoryAwpPubkeyStore();
+const agentTokensDb = useDynamo
+  ? createAgentTokensDbAdapter(tokensDb as TokensDb, loadServerConfig())
+  : new MemoryAgentTokensDb();
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -521,7 +597,7 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
   if (USE_MOCK_AUTH) {
     console.log("[Auth] Mock mode enabled, using mock user");
     const userToken = await tokensDb.createUserToken(MOCK_USER_ID, "mock-session", 3600);
-    const tokenId = MemoryTokensDb.extractTokenId(userToken.pk);
+    const tokenId = tokenIdFromPk(userToken.pk);
     return {
       userId: MOCK_USER_ID,
       scope: `usr_${MOCK_USER_ID}`,
@@ -542,7 +618,7 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
       // Check if we already have a user token for this session
       // For simplicity, create a new one each time (or reuse existing)
       const userToken = await tokensDb.createUserToken(userId, "cognito-session", 3600);
-      const tokenId = MemoryTokensDb.extractTokenId(userToken.pk);
+      const tokenId = tokenIdFromPk(userToken.pk);
 
       console.log(`[Cognito] Authenticated user: ${cognitoPayload.email ?? userId}`);
 
@@ -562,7 +638,7 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
   const token = await tokensDb.getToken(tokenValue);
   if (!token) return null;
 
-  const id = MemoryTokensDb.extractTokenId(token.pk);
+  const id = tokenIdFromPk(token.pk);
 
   if (token.type === "user") {
     return {
@@ -814,7 +890,7 @@ async function handleAuth(req: Request, path: string): Promise<Response> {
       body.writable,
       body.expiresIn
     );
-    const ticketId = MemoryTokensDb.extractTokenId(ticket.pk);
+    const ticketId = tokenIdFromPk(ticket.pk);
     return jsonResponse(201, {
       id: ticketId,
       expiresAt: new Date(ticket.expiresAt).toISOString(),
@@ -1104,6 +1180,10 @@ const authInfo = USE_MOCK_AUTH
 ║    User Pool: ${COGNITO_USER_POOL_ID.padEnd(43)}║
 ║    Login via cas-webui with your Cognito credentials         ║`;
 
+const storageInfo = useDynamo
+  ? "║  Storage: DynamoDB (local)"
+  : "║  Storage: In-memory (set DYNAMODB_ENDPOINT for local DynamoDB)";
+
 console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                    CAS Stack Local Server                    ║
@@ -1112,6 +1192,7 @@ console.log(`
 ║                                                              ║
 ${authInfo}
 ║                                                              ║
+${storageInfo.padEnd(58)}║
 ║  Endpoints:                                                  ║
 ║    GET  /auth/agent-tokens     - List agent tokens           ║
 ║    POST /auth/agent-token      - Create agent token          ║

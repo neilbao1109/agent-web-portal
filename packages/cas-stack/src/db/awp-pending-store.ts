@@ -6,13 +6,13 @@
  */
 
 import type { PendingAuth, PendingAuthStore } from "@agent-web-portal/auth";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createDynamoDBClient } from "./client.ts";
 import type { CasConfig } from "../types.ts";
 
 /**
@@ -39,7 +39,7 @@ export class AwpPendingAuthStore implements PendingAuthStore {
     this.tableName = config.tokensTable;
     this.client =
       client ??
-      DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+      DynamoDBDocumentClient.from(createDynamoDBClient(), {
         marshallOptions: { removeUndefinedValues: true },
       });
   }

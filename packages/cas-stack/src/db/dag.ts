@@ -2,13 +2,13 @@
  * CAS Stack - Database Operations for DAG Metadata
  */
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   BatchGetCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createDynamoDBClient } from "./client.ts";
 import type { CasConfig, CasDagNode } from "../types.ts";
 
 export class DagDb {
@@ -19,7 +19,7 @@ export class DagDb {
     this.tableName = config.casDagTable;
     this.client =
       client ??
-      DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+      DynamoDBDocumentClient.from(createDynamoDBClient(), {
         marshallOptions: { removeUndefinedValues: true },
       });
   }

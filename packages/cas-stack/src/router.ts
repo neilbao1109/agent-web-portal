@@ -437,11 +437,8 @@ export class Router {
           auth.realm,
           TokensDb.extractTokenId(auth.token.pk),
           parsed.data.scope,
-          serverConfig,
-          {
-            writable: parsed.data.writable,
-            expiresIn: parsed.data.expiresIn,
-          }
+          parsed.data.writable,
+          parsed.data.expiresIn
         );
 
         const ticketId = TokensDb.extractTokenId(ticket.pk);

@@ -139,11 +139,8 @@ export class AuthService {
       auth.realm,
       issuerId,
       request.scope,
-      serverConfig,
-      {
-        writable: request.writable,
-        expiresIn: request.expiresIn,
-      }
+      request.writable,
+      request.expiresIn
     );
 
     const ticketId = TokensDb.extractTokenId(ticket.pk);

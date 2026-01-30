@@ -2,7 +2,6 @@
  * CAS Stack - Database Operations for Tokens
  */
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
@@ -11,6 +10,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createDynamoDBClient } from "./client.ts";
 import type {
   AgentToken,
   CasConfig,
@@ -20,6 +20,7 @@ import type {
   UserToken,
   WritableConfig,
 } from "../types.ts";
+import { loadServerConfig } from "../types.ts";
 
 // ============================================================================
 // Token ID Generation
@@ -55,7 +56,7 @@ export class TokensDb {
     this.tableName = config.tokensTable;
     this.client =
       client ??
-      DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+      DynamoDBDocumentClient.from(createDynamoDBClient(), {
         marshallOptions: { removeUndefinedValues: true },
       });
   }
@@ -116,24 +117,23 @@ export class TokensDb {
 
   /**
    * Create a ticket with new structure
+   * Signature matches MemoryTokensDb for server compatibility.
    */
   async createTicket(
     realm: string,
     issuerId: string,
     scope: string | string[],
-    serverConfig: CasServerConfig,
-    options?: {
-      writable?: WritableConfig;
-      expiresIn?: number;
-    }
+    writable?: WritableConfig,
+    expiresIn?: number
   ): Promise<Ticket> {
+    const serverConfig = loadServerConfig();
     const ticketId = generateTicketId();
     const now = Date.now();
 
     // Default 1 hour, capped at maxTicketTtl
-    const requestedExpiresIn = options?.expiresIn ?? 3600;
-    const expiresIn = Math.min(requestedExpiresIn, serverConfig.maxTicketTtl);
-    const expiresAt = now + expiresIn * 1000;
+    const requestedExpiresIn = expiresIn ?? 3600;
+    const cappedExpiresIn = Math.min(requestedExpiresIn, serverConfig.maxTicketTtl);
+    const expiresAt = now + cappedExpiresIn * 1000;
 
     const ticket: Ticket = {
       pk: `token#${ticketId}`,
@@ -141,7 +141,7 @@ export class TokensDb {
       realm,
       issuerId,
       scope,
-      writable: options?.writable,
+      writable,
       createdAt: now,
       expiresAt,
       config: {

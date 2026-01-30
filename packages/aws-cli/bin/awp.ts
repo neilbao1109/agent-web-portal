@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { checkEnv, printCheckEnvResult } from "../src/check-env.ts";
+import { pullConfig, printConfigResult } from "../src/config.ts";
 import type { AwpConfig } from "../src/types.ts";
 import { uploadSkills } from "../src/upload.ts";
 
@@ -36,6 +37,28 @@ program
     const result = await checkEnv();
     printCheckEnvResult(result);
     process.exit(result.errors.length > 0 ? 1 : 0);
+  });
+
+// config command - pull CAS stack outputs from AWS and write to .env
+program
+  .command("config")
+  .description("Pull CAS stack config from AWS CloudFormation and write to .env")
+  .option("-s, --stack <name>", "CloudFormation stack name", "awp-cas")
+  .option("--profile <profile>", "AWS profile name")
+  .option("--region <region>", "AWS region")
+  .option("-e, --env-file <path>", "Path to .env file", ".env")
+  .option("--dry-run", "Print what would be written, do not write")
+  .action(async (options) => {
+    const config = loadConfig();
+    const result = await pullConfig({
+      stackName: options.stack,
+      profile: options.profile ?? config.profile,
+      region: options.region ?? config.region,
+      envFile: options.envFile,
+      dryRun: options.dryRun,
+    });
+    printConfigResult(result);
+    process.exit(result.success ? 0 : 1);
   });
 
 // upload command

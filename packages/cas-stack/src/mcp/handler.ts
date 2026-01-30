@@ -288,11 +288,8 @@ export class McpHandler {
       auth.realm,
       TokensDb.extractTokenId(auth.token.pk),
       parsed.data.scope,
-      this.serverConfig,
-      {
-        writable: parsed.data.writable ? true : undefined,
-        expiresIn: parsed.data.expiresIn,
-      }
+      parsed.data.writable ? true : undefined,
+      parsed.data.expiresIn
     );
 
     const ticketId = TokensDb.extractTokenId(ticket.pk);

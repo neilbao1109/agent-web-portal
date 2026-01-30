@@ -1,0 +1,11 @@
+# Local development: DynamoDB Local for CAS stack
+# Usage: docker compose up -d dynamodb
+# Then set in .env: DYNAMODB_ENDPOINT=http://localhost:8000
+# Create tables: cd packages/cas-stack && bun run scripts/create-local-tables.ts
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
