@@ -17,26 +17,11 @@ import {
 const COGNITO_USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID || "";
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || "";
 
-// Mock auth mode - set VITE_USE_MOCK_AUTH=true in .env
-const USE_MOCK_AUTH = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-const MOCK_USER: User = {
-  userId: "mock-user-12345",
-  email: "test@example.com",
-  name: "Test User",
-};
-const MOCK_TOKENS: AuthTokens = {
-  accessToken: "mock-access-token",
-  idToken: "mock-id-token",
-  refreshToken: "mock-refresh-token",
-};
-
-// Initialize Cognito User Pool (only if not mock mode)
-const userPool = !USE_MOCK_AUTH
-  ? new CognitoUserPool({
-      UserPoolId: COGNITO_USER_POOL_ID,
-      ClientId: COGNITO_CLIENT_ID,
-    })
-  : null;
+// Initialize Cognito User Pool
+const userPool = new CognitoUserPool({
+  UserPoolId: COGNITO_USER_POOL_ID,
+  ClientId: COGNITO_CLIENT_ID,
+});
 
 export interface User {
   userId: string;
@@ -96,15 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Refresh session and get new tokens
   const refreshSession = useCallback(async (): Promise<void> => {
-    // Mock mode - auto login
-    if (USE_MOCK_AUTH) {
-      setUser(MOCK_USER);
-      setTokens(MOCK_TOKENS);
-      return;
-    }
-
     return new Promise((resolve) => {
-      const cognitoUser = userPool?.getCurrentUser();
+      const cognitoUser = userPool.getCurrentUser();
       if (!cognitoUser) {
         setUser(null);
         setTokens(null);
@@ -149,16 +127,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
-    // Mock mode - accept any credentials
-    if (USE_MOCK_AUTH) {
-      setUser(MOCK_USER);
-      setTokens(MOCK_TOKENS);
-      return { success: true };
-    }
-
-    if (!userPool) {
-      return { success: false, error: "Auth not configured" };
-    }
 
     return new Promise((resolve) => {
       const cognitoUser = new CognitoUser({
@@ -203,11 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Logout
   const logout = async (): Promise<void> => {
-    if (!USE_MOCK_AUTH && userPool) {
-      const cognitoUser = userPool.getCurrentUser();
-      if (cognitoUser) {
-        cognitoUser.signOut();
-      }
+    const cognitoUser = userPool.getCurrentUser();
+    if (cognitoUser) {
+      cognitoUser.signOut();
     }
     setUser(null);
     setTokens(null);
@@ -215,15 +181,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Get current access token (refreshes if needed)
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    // Mock mode - return mock token
-    if (USE_MOCK_AUTH) {
-      return MOCK_TOKENS.accessToken;
-    }
-
-    if (!userPool) {
-      return null;
-    }
-
     const cognitoUser = userPool.getCurrentUser();
     if (!cognitoUser) {
       return null;
