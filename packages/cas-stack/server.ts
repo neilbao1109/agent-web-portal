@@ -345,6 +345,58 @@ class MemoryAwpPubkeyStore implements PubkeyStore {
 }
 
 // ============================================================================
+// In-Memory Agent Token Storage (for WebUI token management)
+// ============================================================================
+
+interface AgentTokenRecord {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+class MemoryAgentTokensDb {
+  private tokens = new Map<string, AgentTokenRecord>();
+
+  async create(
+    userId: string,
+    name: string,
+    options?: { description?: string; expiresIn?: number }
+  ): Promise<AgentTokenRecord> {
+    const id = `agt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const expiresIn = options?.expiresIn ?? 30 * 24 * 60 * 60; // 30 days default
+    const token: AgentTokenRecord = {
+      id,
+      userId,
+      name,
+      description: options?.description,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + expiresIn * 1000,
+    };
+    this.tokens.set(id, token);
+    return token;
+  }
+
+  async listByUser(userId: string): Promise<AgentTokenRecord[]> {
+    const now = Date.now();
+    return Array.from(this.tokens.values()).filter(
+      (t) => t.userId === userId && t.expiresAt > now
+    );
+  }
+
+  async revoke(userId: string, tokenId: string): Promise<boolean> {
+    const token = this.tokens.get(tokenId);
+    if (!token || token.userId !== userId) {
+      return false;
+    }
+    this.tokens.delete(tokenId);
+    return true;
+  }
+}
+
+// ============================================================================
 // Cognito JWT Verifier (for cas-webui integration)
 // ============================================================================
 
@@ -355,9 +407,16 @@ const COGNITO_ISSUER = COGNITO_USER_POOL_ID
   ? `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}`
   : "";
 
-// JWKS for Cognito JWT verification
-const cognitoJwks = COGNITO_USER_POOL_ID
-  ? createRemoteJWKSet(new URL(`${COGNITO_ISSUER}/.well-known/jwks.json`))
+// Local development mock mode - skip Cognito verification
+const USE_MOCK_AUTH = process.env.USE_MOCK_AUTH === "true";
+const MOCK_USER_ID = "mock-user-12345";
+const MOCK_USER_EMAIL = "test@example.com";
+
+// JWKS for Cognito JWT verification (skip if mock mode)
+const cognitoJwks = COGNITO_USER_POOL_ID && !USE_MOCK_AUTH
+  ? createRemoteJWKSet(new URL(`${COGNITO_ISSUER}/.well-known/jwks.json`), {
+      timeoutDuration: 10000, // 10 seconds timeout
+    })
   : null;
 
 interface CognitoTokenPayload {
@@ -369,6 +428,17 @@ interface CognitoTokenPayload {
 }
 
 async function verifyCognitoToken(token: string): Promise<CognitoTokenPayload | null> {
+  // Mock mode - return mock user for any token
+  if (USE_MOCK_AUTH) {
+    console.log("[Auth] Mock mode enabled, using mock user");
+    return {
+      sub: MOCK_USER_ID,
+      email: MOCK_USER_EMAIL,
+      token_use: "access",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
+  }
+
   if (!cognitoJwks || !COGNITO_ISSUER) {
     return null;
   }
@@ -394,6 +464,7 @@ const dagDb = new MemoryDagDb();
 const casStorage = new MemoryCasStorage();
 const pendingAuthStore = new MemoryAwpPendingAuthStore();
 const pubkeyStore = new MemoryAwpPubkeyStore();
+const agentTokensDb = new MemoryAgentTokensDb();
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -446,6 +517,21 @@ async function authenticate(req: Request): Promise<AuthContext | null> {
 
   const [_scheme, tokenValue] = authHeader.split(" ");
   if (!tokenValue) return null;
+
+  // Mock mode - accept any token and return mock user
+  if (USE_MOCK_AUTH) {
+    console.log("[Auth] Mock mode enabled, using mock user");
+    const userToken = await tokensDb.createUserToken(MOCK_USER_ID, "mock-session", 3600);
+    const tokenId = MemoryTokensDb.extractTokenId(userToken.pk);
+    return {
+      userId: MOCK_USER_ID,
+      scope: `usr_${MOCK_USER_ID}`,
+      canRead: true,
+      canWrite: true,
+      canIssueTicket: true,
+      tokenId,
+    };
+  }
 
   // Check if it's a JWT (Cognito token) - JWTs have 3 parts separated by dots
   if (tokenValue.split(".").length === 3) {
@@ -752,6 +838,58 @@ async function handleAuth(req: Request, path: string): Promise<Response> {
     return jsonResponse(200, { success: true });
   }
 
+  // ========================================================================
+  // Agent Token Management Routes (for WebUI)
+  // ========================================================================
+
+  // GET /auth/tokens - List agent tokens
+  if (req.method === "GET" && path === "/tokens") {
+    const tokens = await agentTokensDb.listByUser(auth.userId);
+    return jsonResponse(200, {
+      tokens: tokens.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        expiresAt: new Date(t.expiresAt).toISOString(),
+        createdAt: new Date(t.createdAt).toISOString(),
+      })),
+    });
+  }
+
+  // POST /auth/tokens - Create agent token
+  if (req.method === "POST" && path === "/tokens") {
+    const body = (await req.json()) as {
+      name?: string;
+      description?: string;
+      expiresIn?: number;
+    };
+    if (!body.name) {
+      return errorResponse(400, "Missing name");
+    }
+    const token = await agentTokensDb.create(auth.userId, body.name, {
+      description: body.description,
+      expiresIn: body.expiresIn,
+    });
+    return jsonResponse(201, {
+      id: token.id,
+      name: token.name,
+      description: token.description,
+      expiresAt: new Date(token.expiresAt).toISOString(),
+      createdAt: new Date(token.createdAt).toISOString(),
+    });
+  }
+
+  // DELETE /auth/tokens/:id - Revoke agent token
+  const agentTokenMatch = path.match(/^\/tokens\/([^/]+)$/);
+  if (req.method === "DELETE" && agentTokenMatch) {
+    const tokenId = agentTokenMatch[1]!;
+    const success = await agentTokensDb.revoke(auth.userId, tokenId);
+    if (!success) {
+      return errorResponse(404, "Agent token not found");
+    }
+    return jsonResponse(200, { success: true });
+  }
+
   return errorResponse(404, "Auth endpoint not found");
 }
 
@@ -761,10 +899,22 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
     return errorResponse(401, "Unauthorized");
   }
 
-  // Resolve @me
-  const effectiveScope = scope === "@me" ? auth.scope : scope;
-  if (effectiveScope !== auth.scope) {
-    return errorResponse(403, "Access denied to this scope");
+  // Resolve scope:
+  // - @me or ~ resolves to user's scope
+  // - ticket ID (tkt_xxx) uses the ticket's shard (already in auth.scope)
+  // - explicit scope must match auth.scope
+  let effectiveScope: string;
+  if (scope === "@me" || scope === "~") {
+    effectiveScope = auth.scope;
+  } else if (scope.startsWith("tkt_")) {
+    // Ticket access - use the ticket's shard
+    effectiveScope = auth.scope;
+  } else {
+    // Explicit scope - must match
+    if (scope !== auth.scope) {
+      return errorResponse(403, "Access denied to this scope");
+    }
+    effectiveScope = scope;
   }
 
   // GET /cas/{scope}/nodes - List all nodes in scope
@@ -788,6 +938,34 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
     }
     const { missing } = await ownershipDb.checkOwnership(effectiveScope, body.nodes);
     return jsonResponse(200, { missing });
+  }
+
+  // PUT /cas/{scope}/node - Upload content (server calculates key)
+  if (req.method === "PUT" && subPath === "/node") {
+    if (!auth.canWrite) {
+      return errorResponse(403, "Write access denied");
+    }
+    const content = Buffer.from(await req.arrayBuffer());
+    if (content.length === 0) {
+      return errorResponse(400, "Empty body");
+    }
+    const contentType = req.headers.get("Content-Type") ?? "application/octet-stream";
+
+    const result = await casStorage.put(content, contentType);
+
+    await ownershipDb.addOwnership(
+      effectiveScope,
+      result.key,
+      auth.tokenId,
+      contentType,
+      result.size
+    );
+
+    return jsonResponse(201, {
+      key: result.key,
+      size: result.size,
+      contentType,
+    });
   }
 
   // PUT /cas/{scope}/node/:key
@@ -913,21 +1091,27 @@ async function handleCas(req: Request, scope: string, subPath: string): Promise<
 
 const PORT = parseInt(process.env.CAS_API_PORT ?? process.env.PORT ?? "3550", 10);
 
-if (!COGNITO_USER_POOL_ID) {
+if (!COGNITO_USER_POOL_ID && !USE_MOCK_AUTH) {
   console.error("ERROR: VITE_COGNITO_USER_POOL_ID environment variable is required");
   console.error("Please set it in your .env file");
   process.exit(1);
 }
 
+const authInfo = USE_MOCK_AUTH
+  ? `║  Auth: Mock Mode (no Cognito verification)                   ║
+║    Email: ${MOCK_USER_EMAIL.padEnd(47)}║
+║    Password: (any)                                           ║`
+  : `║  Auth: Cognito                                               ║
+║    User Pool: ${COGNITO_USER_POOL_ID.padEnd(43)}║
+║    Login via cas-webui with your Cognito credentials         ║`;
+
 console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                    CAS Stack Local Server                    ║
 ╠══════════════════════════════════════════════════════════════╣
-║  URL: http://localhost:${PORT}                                 ║
+║  URL: http://localhost:${String(PORT).padEnd(38)}║
 ║                                                              ║
-║  Auth: Cognito                                               ║
-║    User Pool: ${COGNITO_USER_POOL_ID.padEnd(43)}║
-║    Login via cas-webui with your Cognito credentials         ║
+${authInfo}
 ║                                                              ║
 ║  Endpoints:                                                  ║
 ║    GET  /auth/agent-tokens     - List agent tokens           ║
@@ -953,18 +1137,26 @@ Bun.serve({
     }
 
     try {
-      // Health check
+      // Health check (root level)
       if (path === "/" || path === "/health") {
         return jsonResponse(200, { status: "ok", service: "cas-stack-local" });
       }
 
+      // All API routes under /api prefix
+      if (!path.startsWith("/api/")) {
+        return errorResponse(404, "Not found");
+      }
+
+      // Strip /api prefix for internal routing
+      const apiPath = path.slice(4); // Remove "/api"
+
       // Auth routes
-      if (path.startsWith("/auth/")) {
-        return handleAuth(req, path.replace("/auth", ""));
+      if (apiPath.startsWith("/auth/")) {
+        return handleAuth(req, apiPath.replace("/auth", ""));
       }
 
       // CAS routes
-      const casMatch = path.match(/^\/cas\/([^/]+)(.*)$/);
+      const casMatch = apiPath.match(/^\/cas\/([^/]+)(.*)$/);
       if (casMatch) {
         const [, scope, subPath] = casMatch;
         return handleCas(req, scope!, subPath ?? "");

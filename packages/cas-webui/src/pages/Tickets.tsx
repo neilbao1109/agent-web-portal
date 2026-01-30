@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Box,
   Card,
@@ -24,6 +24,7 @@ import {
   ConfirmationNumber as TicketIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../utils/api";
 
 interface CreatedTicket {
   id: string;
@@ -82,18 +83,21 @@ export default function Tickets() {
         .filter((s) => s);
       const scope = scopeValues.length === 1 ? scopeValues[0] : scopeValues;
 
-      const response = await fetch("/api/auth/ticket", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+      const response = await apiRequest(
+        "/api/auth/ticket",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            scope,
+            writable: newTicketWritable || undefined,
+            expiresIn: parseInt(newTicketExpiresIn, 10),
+          }),
         },
-        body: JSON.stringify({
-          scope,
-          writable: newTicketWritable || undefined,
-          expiresIn: parseInt(newTicketExpiresIn, 10),
-        }),
-      });
+        accessToken
+      );
 
       if (response.ok) {
         const data = await response.json();

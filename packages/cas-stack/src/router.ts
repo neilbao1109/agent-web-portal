@@ -158,29 +158,37 @@ export class Router {
     }
 
     try {
+      // Health check (root level)
+      if (req.path === "/" || req.path === "/health") {
+        return jsonResponse(200, { status: "ok", service: "cas-stack" });
+      }
+
+      // All API routes under /api prefix
+      if (!req.path.startsWith("/api/")) {
+        return errorResponse(404, "Not found");
+      }
+
+      // Strip /api prefix for internal routing
+      const apiPath = req.path.slice(4); // Remove "/api"
+
       // Config endpoint (no auth required)
-      if (req.path === "/cas/config" && req.method === "GET") {
+      if (apiPath === "/cas/config" && req.method === "GET") {
         return this.handleGetConfig();
       }
 
       // Auth routes (no auth required for some)
-      if (req.path.startsWith("/auth/")) {
-        return this.handleAuth(req);
+      if (apiPath.startsWith("/auth/")) {
+        return this.handleAuth({ ...req, path: apiPath });
       }
 
       // MCP endpoint (requires Agent Token auth)
-      if (req.path === "/mcp" && req.method === "POST") {
-        return this.handleMcp(req);
+      if (apiPath === "/mcp" && req.method === "POST") {
+        return this.handleMcp({ ...req, path: apiPath });
       }
 
       // CAS routes (auth required)
-      if (req.path.startsWith("/cas/")) {
-        return this.handleCas(req);
-      }
-
-      // Health check
-      if (req.path === "/" || req.path === "/health") {
-        return jsonResponse(200, { status: "ok", service: "cas-stack" });
+      if (apiPath.startsWith("/cas/")) {
+        return this.handleCas({ ...req, path: apiPath });
       }
 
       return errorResponse(404, "Not found");

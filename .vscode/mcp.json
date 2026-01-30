@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "cas": {
+      "type": "stdio",
+      "command": "bun",
+      "args": [
+        "run",
+        "${workspaceFolder}/packages/cas-stack/mcp-server.ts"
+      ],
+      "env": {
+        "CAS_ENDPOINT": "http://localhost:3550",
+        "CAS_AGENT_TOKEN": "agt_ml0lmx2cf8wmvn"
+      }
+    }
+  }
+}

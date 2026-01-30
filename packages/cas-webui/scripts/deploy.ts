@@ -19,7 +19,7 @@ import { CloudFrontClient, CreateInvalidationCommand } from "@aws-sdk/client-clo
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const UI_DIST_DIR = join(import.meta.dir, "../dist");
-const DEFAULT_STACK_NAME = process.env.STACK_NAME || "cas-stack";
+const DEFAULT_STACK_NAME = process.env.STACK_NAME || "awp-cas";
 
 // AWS client config - uses default credential chain (env vars, ~/.aws/credentials, IAM role, etc.)
 const awsConfig = {};

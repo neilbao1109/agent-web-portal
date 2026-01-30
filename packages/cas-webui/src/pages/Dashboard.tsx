@@ -14,6 +14,7 @@ import {
   TrendingUp as TrendingUpIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../utils/api";
 
 interface DashboardStats {
   agentTokenCount: number;
@@ -87,11 +88,7 @@ export default function Dashboard() {
       }
 
       // Fetch agent tokens count
-      const tokensResponse = await fetch("/api/auth/tokens", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const tokensResponse = await apiRequest("/api/auth/tokens", {}, token);
 
       let agentTokenCount = 0;
       if (tokensResponse.ok) {
@@ -100,11 +97,7 @@ export default function Dashboard() {
       }
 
       // Fetch nodes stats - get first page to count
-      const nodesResponse = await fetch("/api/cas/~/nodes?limit=100", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const nodesResponse = await apiRequest("/api/cas/~/nodes?limit=100", {}, token);
 
       let nodeCount: number | string = 0;
       let totalSize = 0;

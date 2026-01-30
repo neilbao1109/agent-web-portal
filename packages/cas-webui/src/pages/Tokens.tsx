@@ -25,6 +25,7 @@ import {
   ContentCopy as CopyIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../utils/api";
 
 interface AgentToken {
   id: string;
@@ -86,11 +87,7 @@ export default function Tokens() {
         return;
       }
 
-      const response = await fetch("/api/auth/tokens", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const response = await apiRequest("/api/auth/tokens", {}, accessToken);
 
       if (response.ok) {
         const data = await response.json();
@@ -131,18 +128,21 @@ export default function Tokens() {
         return;
       }
 
-      const response = await fetch("/api/auth/tokens", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+      const response = await apiRequest(
+        "/api/auth/tokens",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: newTokenName.trim(),
+            description: newTokenDescription.trim() || undefined,
+            expiresIn: parseInt(newTokenExpiresIn, 10),
+          }),
         },
-        body: JSON.stringify({
-          name: newTokenName.trim(),
-          description: newTokenDescription.trim() || undefined,
-          expiresIn: parseInt(newTokenExpiresIn, 10),
-        }),
-      });
+        accessToken
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -184,14 +184,12 @@ export default function Tokens() {
         return;
       }
 
-      const response = await fetch(
+      const response = await apiRequest(
         `/api/auth/tokens/${encodeURIComponent(tokenToDelete.id)}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
+        },
+        accessToken
       );
 
       if (response.ok) {

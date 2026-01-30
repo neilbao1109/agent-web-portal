@@ -207,8 +207,8 @@ export class AuthMiddleware {
    * Check if auth context can access the requested shard
    */
   checkShardAccess(auth: AuthContext, requestedShard: string): boolean {
-    // Resolve @me alias
-    const effectiveShard = requestedShard === "@me" ? auth.shard : requestedShard;
+    // Resolve @me or ~ alias
+    const effectiveShard = (requestedShard === "@me" || requestedShard === "~") ? auth.shard : requestedShard;
 
     // Check if auth shard matches requested shard
     return auth.shard === effectiveShard;
@@ -306,10 +306,10 @@ export class AuthMiddleware {
   }
 
   /**
-   * Resolve shard alias (@me -> actual shard)
+   * Resolve shard alias (@me or ~ -> actual shard)
    */
   resolveShard(auth: AuthContext, requestedShard: string): string {
-    return requestedShard === "@me" ? auth.shard : requestedShard;
+    return (requestedShard === "@me" || requestedShard === "~") ? auth.shard : requestedShard;
   }
 
   /**

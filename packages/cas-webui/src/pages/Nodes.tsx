@@ -36,6 +36,7 @@ import {
   OpenInNew as OpenInNewIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest, API_URL } from "../utils/api";
 
 interface CasNode {
   key: string;
@@ -115,11 +116,7 @@ export default function Nodes() {
         params.append("startKey", nextKey);
       }
 
-      const response = await fetch(`/api/cas/${scope}/nodes?${params}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const response = await apiRequest(`/api/cas/${scope}/nodes?${params}`, {}, accessToken);
 
       if (response.ok) {
         const data = await response.json();
@@ -178,14 +175,12 @@ export default function Nodes() {
         return;
       }
 
-      const response = await fetch(
+      const response = await apiRequest(
         `/api/cas/@me/node/${encodeURIComponent(nodeToDelete.key)}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
+        },
+        accessToken
       );
 
       if (response.ok) {
@@ -469,7 +464,7 @@ export default function Nodes() {
               onClick={() => {
                 // Open in new tab - this would be the actual download URL
                 window.open(
-                  `/api/cas/@me/node/${encodeURIComponent(detailNode.key)}`,
+                  `${API_URL}/api/cas/@me/node/${encodeURIComponent(detailNode.key)}`,
                   "_blank"
                 );
               }}

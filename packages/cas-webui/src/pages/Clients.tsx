@@ -21,6 +21,7 @@ import {
   Computer as ComputerIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../utils/api";
 
 interface AwpClient {
   pubkey: string;
@@ -72,11 +73,7 @@ export default function Clients() {
         return;
       }
 
-      const response = await fetch("/api/auth/agent-tokens/clients", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const response = await apiRequest("/api/auth/agent-tokens/clients", {}, accessToken);
 
       if (response.ok) {
         const data = await response.json();
@@ -112,14 +109,12 @@ export default function Clients() {
         return;
       }
 
-      const response = await fetch(
+      const response = await apiRequest(
         `/api/auth/agent-tokens/clients/${encodeURIComponent(clientToDelete.pubkey)}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
+        },
+        accessToken
       );
 
       if (response.ok) {
