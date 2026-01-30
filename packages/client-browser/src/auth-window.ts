@@ -176,10 +176,25 @@ export function watchWindowClosed(
     return () => {};
   }
 
+  let coopBlocked = false;
+
   const intervalId = setInterval(() => {
-    if (authWindow.closed) {
-      clearInterval(intervalId);
-      callback();
+    // Skip if we know COOP is blocking access
+    if (coopBlocked) {
+      return;
+    }
+
+    try {
+      if (authWindow.closed) {
+        clearInterval(intervalId);
+        callback();
+      }
+    } catch {
+      // Cross-Origin-Opener-Policy blocks access to window.closed
+      // This happens when the popup navigates to a different origin
+      // We can't detect when the window closes, so we rely on polling/postMessage instead
+      coopBlocked = true;
+      // Don't call callback here - let polling handle auth completion
     }
   }, checkInterval);
 

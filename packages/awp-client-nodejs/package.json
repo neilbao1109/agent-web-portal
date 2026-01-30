@@ -1,0 +1,58 @@
+{
+  "name": "@agent-web-portal/awp-client-nodejs",
+  "version": "0.0.1",
+  "description": "AWP Client for Node.js with CAS-based blob exchange and filesystem caching",
+  "license": "MIT",
+  "author": "Agent Web Portal Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/agent-web-portal.git",
+    "directory": "packages/awp-client-nodejs"
+  },
+  "homepage": "https://github.com/anthropics/agent-web-portal#readme",
+  "bugs": {
+    "url": "https://github.com/anthropics/agent-web-portal/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "ai-agent",
+    "agent-web-portal",
+    "awp",
+    "client",
+    "nodejs",
+    "cas",
+    "filesystem"
+  ],
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    }
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf .turbo dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "dependencies": {
+    "@agent-web-portal/awp-client-core": "workspace:*",
+    "@agent-web-portal/cas-client-nodejs": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}

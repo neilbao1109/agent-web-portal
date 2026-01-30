@@ -1,0 +1,56 @@
+{
+  "name": "@agent-web-portal/awp-client-core",
+  "version": "0.0.1",
+  "description": "AWP Client core - platform-agnostic client with CAS-based blob exchange",
+  "license": "MIT",
+  "author": "Agent Web Portal Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/agent-web-portal.git",
+    "directory": "packages/awp-client-core"
+  },
+  "homepage": "https://github.com/anthropics/agent-web-portal#readme",
+  "bugs": {
+    "url": "https://github.com/anthropics/agent-web-portal/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "ai-agent",
+    "agent-web-portal",
+    "awp",
+    "client",
+    "sdk",
+    "cas",
+    "blob"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf .turbo dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "dependencies": {
+    "@agent-web-portal/cas-client-core": "workspace:*",
+    "@agent-web-portal/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
