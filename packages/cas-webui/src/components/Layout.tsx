@@ -24,6 +24,7 @@ import {
   Logout as LogoutIcon,
   KeyboardArrowDown as ArrowDownIcon,
   Key as KeyIcon,
+  ConfirmationNumber as TicketIcon,
 } from "@mui/icons-material";
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
@@ -35,6 +36,7 @@ const menuItems = [
   { path: "/agents", label: "Clients", icon: <DevicesIcon /> },
   { path: "/nodes", label: "Nodes", icon: <HubIcon /> },
   { path: "/tokens", label: "Agent Tokens", icon: <KeyIcon /> },
+  { path: "/tickets", label: "Tickets", icon: <TicketIcon /> },
 ];
 
 export default function Layout() {

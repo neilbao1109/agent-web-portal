@@ -32,7 +32,7 @@
 
 - [x] 添加 Agent Tokens 管理页面
 - [x] 更新 Dashboard 显示 Agent Token 和 Node 统计
-- [ ] 更新 Ticket 创建表单（添加 endpoint 显示）
+- [x] 添加 Tickets 创建页面（显示 endpoint URL）
 
 ---
 
