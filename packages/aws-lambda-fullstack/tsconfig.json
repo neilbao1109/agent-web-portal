@@ -4,7 +4,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
@@ -15,8 +15,14 @@
     "declarationMap": true,
     "sourceMap": true,
     "noEmit": true,
+    "jsx": "react-jsx",
     "types": ["bun-types", "node"]
   },
-  "include": ["src/**/*", "server.ts", "scripts/**/*"],
-  "exclude": ["node_modules", "dist", ".aws-sam"]
+  "include": [
+    "backend/src/**/*",
+    "backend/server.ts",
+    "frontend/src/**/*",
+    "scripts/**/*"
+  ],
+  "exclude": ["node_modules", "backend/dist", "frontend/dist"]
 }

@@ -155,10 +155,11 @@ async function handleGetTicket(params: {
   }
 
   const data = await response.json();
-  const endpoint = `${CAS_ENDPOINT}/api/cas/${data.id}`;
-
+  // The server returns the full endpoint URL in the format:
+  // https://cas.example.com/api/cas/{realm}/ticket/{ticketId}
+  // Use it directly for #cas.endpoint compatibility
   return {
-    endpoint,
+    endpoint: data.endpoint,
     expiresAt: data.expiresAt,
     scope: data.scope,
   };

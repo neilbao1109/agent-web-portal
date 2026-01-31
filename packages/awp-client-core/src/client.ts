@@ -353,41 +353,29 @@ export class AwpClient {
 
     // Create CAS context if there are CAS keys or if tool may produce output
     // (tools typically write results to CAS)
-    let serverCasBlobContext: {
-      ticket: string;
-      endpoint: string;
-      expiresAt: string;
-      realm: string;
-      scope: string | string[];
-      writable: boolean | { quota?: number; accept?: string[] };
-      config: { chunkThreshold: number };
-    } | undefined;
+    let casEndpointUrl: string | undefined;
 
     // Always try to create a ticket for tools (they typically need to write outputs)
     try {
       const scope = casKeys.length > 0 ? casKeys : ["*"];
       const ticketResponse = await this.createTicketForTool(scope, true);
-      // Transform CreateTicketResponse to server's CasBlobContext format
-      serverCasBlobContext = {
-        ticket: ticketResponse.id,  // Map 'id' to 'ticket'
-        endpoint: ticketResponse.endpoint,
-        expiresAt: ticketResponse.expiresAt,
-        realm: ticketResponse.realm,
-        scope: ticketResponse.scope,
-        writable: ticketResponse.writable,
-        config: ticketResponse.config,
-      };
+      // Use the ticket endpoint URL directly for #cas.endpoint
+      casEndpointUrl = ticketResponse.endpoint;
     } catch (error) {
       // If ticket creation fails, continue without CAS context
       // (tool may not need CAS, or will fail with a clear error)
       console.warn("[AwpClient] Failed to create CAS ticket:", error);
     }
 
-    // Send the request with Tool-facing arguments and CAS context
+    // Inject #cas.endpoint into arguments if we have a ticket
+    const argsWithCasEndpoint = casEndpointUrl
+      ? { ...toolArgs, "#cas.endpoint": casEndpointUrl }
+      : toolArgs;
+
+    // Send the request with Tool-facing arguments (with #cas.endpoint injected)
     const response = (await this.sendRequest("tools/call", {
       name,
-      arguments: toolArgs,
-      _casBlobContext: serverCasBlobContext,
+      arguments: argsWithCasEndpoint,
     })) as {
       content: Array<{ type: string; text?: string }>;
       isError?: boolean;

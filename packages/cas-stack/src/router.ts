@@ -677,10 +677,20 @@ export class Router {
     let subPath = casMatch[2] ?? "";
 
     // Support ticket URL as endpoint base: /cas/{realm}/ticket/{ticketId}/...
-    // Strip the /ticket/{ticketId} prefix if present, as ticket auth is handled via Authorization header
-    const ticketPathMatch = subPath.match(/^\/ticket\/[^/]+(\/.*)?$/);
+    // Handle GET /cas/{realm}/ticket/{ticketId} - return ticket info (no auth required)
+    // Or strip the /ticket/{ticketId} prefix for other operations
+    const ticketPathMatch = subPath.match(/^\/ticket\/([^/]+)(\/.*)?$/);
     if (ticketPathMatch) {
-      subPath = ticketPathMatch[1] ?? "";
+      const ticketId = ticketPathMatch[1]!;
+      const remainingPath = ticketPathMatch[2] ?? "";
+
+      // GET /cas/{realm}/ticket/{ticketId} - Return ticket info for #cas.endpoint
+      if (req.method === "GET" && remainingPath === "") {
+        return this.handleGetTicketInfo(requestedRealm, ticketId);
+      }
+
+      // For other operations, strip the ticket path prefix
+      subPath = remainingPath;
     }
 
     // Authenticate
@@ -759,6 +769,52 @@ export class Router {
     }
 
     return errorResponse(404, "CAS endpoint not found");
+  }
+
+  /**
+   * GET /cas/{realm}/ticket/{ticketId} - Return ticket info for #cas.endpoint
+   *
+   * This endpoint returns CasBlobContext-compatible information for a ticket.
+   * No authentication required - the ticket ID itself serves as authorization.
+   * This enables traditional MCP clients to use #cas.endpoint URLs.
+   */
+  private async handleGetTicketInfo(
+    realm: string,
+    ticketId: string
+  ): Promise<HttpResponse> {
+    try {
+      // Look up the ticket
+      const ticket = await this.tokensDb.getTicket(ticketId);
+
+      if (!ticket) {
+        return errorResponse(404, "Ticket not found");
+      }
+
+      // Check if ticket is expired
+      if (ticket.expiresAt < Date.now()) {
+        return errorResponse(410, "Ticket expired");
+      }
+
+      // Verify realm matches
+      if (ticket.realm !== realm) {
+        return errorResponse(403, "Ticket realm mismatch");
+      }
+
+      const serverConfig = loadServerConfig();
+
+      // Return CasBlobContext-compatible info
+      return jsonResponse(200, {
+        ticket: ticketId,
+        endpoint: `${serverConfig.baseUrl}/api/cas/${ticket.realm}/ticket/${ticketId}`,
+        expiresAt: new Date(ticket.expiresAt).toISOString(),
+        realm: ticket.realm,
+        scope: ticket.scope,
+        writable: ticket.writable ?? false,
+        config: ticket.config,
+      });
+    } catch (error: any) {
+      return errorResponse(500, error.message ?? "Failed to get ticket info");
+    }
   }
 
   /**

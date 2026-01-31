@@ -18,7 +18,7 @@ import type {
   ServerPortalConfig,
   SkillsListResponse,
 } from "./types.ts";
-import { CasNotConfiguredError, TicketCreationError } from "./types.ts";
+import { CasNotConfiguredError, CasTicketError, TicketCreationError } from "./types.ts";
 
 /**
  * Default ticket provider that creates tickets via CAS API
@@ -262,41 +262,26 @@ export class ServerPortal {
   /**
    * Execute a tool with CAS context
    *
-   * CAS context can be provided in three ways (in order of priority):
-   * 1. AWP Client: passes _casBlobContext in the request params
-   * 2. Traditional MCP Client: uses #cas-endpoint in tool arguments
-   * 3. Server CAS config: uses ticketProvider to create a new ticket
+   * CAS context is obtained in the following order of priority:
+   * 1. #cas.endpoint in tool arguments (AWP Client or traditional MCP with CAS MCP)
+   * 2. Server CAS config: uses ticketProvider to create a new ticket
    *
    * If none of these are available, a dummy CAS client is used (operations will fail
    * if the tool actually needs CAS access).
    *
    * @param name - Tool name
-   * @param args - Tool arguments
-   * @param casContext - Optional CAS context from AWP client (_casBlobContext)
+   * @param args - Tool arguments (may contain #cas.endpoint)
    * @returns Tool result
    */
-  async executeTool(name: string, args: unknown, casContext?: CasBlobContext): Promise<unknown> {
-    // Try to get CAS context from various sources
-    let context = casContext;
+  async executeTool(name: string, args: unknown): Promise<unknown> {
+    // Try to get CAS context from #cas.endpoint in arguments
+    let context = await this.extractCasContextFromArgs(args);
 
-    // Log CAS context sources for debugging
-    if (casContext) {
-      console.log("[ServerPortal] Using CAS context from _casBlobContext:", {
-        ticket: casContext.ticket,
-        realm: casContext.realm,
-        endpoint: casContext.endpoint,
+    if (context) {
+      console.log("[ServerPortal] Using CAS context from #cas.endpoint in args:", {
+        ticket: context.ticket,
+        realm: context.realm,
       });
-    }
-
-    // If no context provided, try to extract from #cas-endpoint in arguments
-    if (!context) {
-      context = this.extractCasContextFromArgs(args);
-      if (context) {
-        console.log("[ServerPortal] Using CAS context from #cas-endpoint in args:", {
-          ticket: context.ticket,
-          realm: context.realm,
-        });
-      }
     }
 
     // If still no context, try to create one using the server's ticket provider
@@ -375,77 +360,79 @@ export class ServerPortal {
   // ============================================================================
 
   /**
-   * Extract CAS context from #cas-endpoint in tool arguments
+   * Extract CAS context from tool arguments
    *
-   * Looks for objects with "#cas-endpoint" field which contains a full
+   * Looks for "#cas.endpoint" field which contains a full
    * CAS endpoint URL with embedded ticket:
    * https://cas.example.com/api/cas/{realm}/ticket/{ticketId}
+   *
+   * Fetches the ticket info via HTTP GET to get full CasBlobContext.
    */
-  private extractCasContextFromArgs(args: unknown): CasBlobContext | undefined {
+  private async extractCasContextFromArgs(args: unknown): Promise<CasBlobContext | undefined> {
     if (typeof args !== "object" || args === null) {
       return undefined;
     }
 
-    // Look for #cas-endpoint in top-level object
+    // Look for #cas.endpoint in top-level object
     const argsObj = args as Record<string, unknown>;
-    const casEndpoint = argsObj["#cas-endpoint"];
+    const casEndpoint = argsObj["#cas.endpoint"];
 
     if (typeof casEndpoint !== "string") {
       // Also check nested objects for blob refs
       for (const value of Object.values(argsObj)) {
         if (typeof value === "object" && value !== null) {
           const nested = value as Record<string, unknown>;
-          const nestedEndpoint = nested["#cas-endpoint"];
+          const nestedEndpoint = nested["#cas.endpoint"];
           if (typeof nestedEndpoint === "string") {
-            return this.parseCasEndpoint(nestedEndpoint);
+            return this.fetchCasContext(nestedEndpoint);
           }
         }
       }
       return undefined;
     }
 
-    return this.parseCasEndpoint(casEndpoint);
+    return this.fetchCasContext(casEndpoint);
   }
 
   /**
-   * Parse a #cas-endpoint URL into CasBlobContext
+   * Fetch CasBlobContext from a #cas.endpoint URL via HTTP GET
    *
    * URL format: https://cas.example.com/api/cas/{realm}/ticket/{ticketId}
    */
-  private parseCasEndpoint(endpointUrl: string): CasBlobContext | undefined {
+  private async fetchCasContext(endpointUrl: string): Promise<CasBlobContext | undefined> {
     try {
-      const url = new URL(endpointUrl);
-      const pathParts = url.pathname.split("/").filter(Boolean);
+      console.log("[ServerPortal] Fetching CAS context from:", endpointUrl);
 
-      // Expected path: /api/cas/{realm}/ticket/{ticketId}
-      // or: /cas/{realm}/ticket/{ticketId}
-      const casIndex = pathParts.indexOf("cas");
-      if (casIndex === -1 || pathParts.length < casIndex + 4) {
-        return undefined;
-      }
-
-      const realm = pathParts[casIndex + 1];
-      const ticketId = pathParts[casIndex + 3];
-
-      if (!realm || !ticketId || pathParts[casIndex + 2] !== "ticket") {
-        return undefined;
-      }
-
-      // Extract base endpoint (everything before /cas/{realm}/ticket/{ticketId})
-      const baseEndpoint = `${url.origin}${pathParts.slice(0, casIndex + 1).map((p) => `/${p}`).join("")}`;
-
-      return {
-        ticket: ticketId,
-        endpoint: baseEndpoint,
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(), // Assume 1 hour
-        realm,
-        scope: ["*"],
-        writable: true,
-        config: {
-          chunkThreshold: 1048576,
+      const response = await fetch(endpointUrl, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
         },
-      };
-    } catch {
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[ServerPortal] Failed to fetch CAS context: ${response.status} - ${errorText}`);
+        throw new CasTicketError(
+          `Failed to fetch ticket info: ${response.status}`,
+          response.status === 404 ? "NOT_FOUND" :
+          response.status === 410 ? "EXPIRED" : "FETCH_FAILED"
+        );
+      }
+
+      const context = await response.json() as CasBlobContext;
+      console.log("[ServerPortal] Successfully fetched CAS context:", {
+        ticket: context.ticket,
+        realm: context.realm,
+        writable: context.writable,
+      });
+
+      return context;
+    } catch (error) {
+      if (error instanceof CasTicketError) {
+        throw error;
+      }
+      console.error("[ServerPortal] Error fetching CAS context:", error);
       return undefined;
     }
   }

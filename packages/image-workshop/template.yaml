@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Image Workshop Stack - AI Image Generation and Editing Service
+Description: Image Workshop - Full Stack AI Image Generation and Editing Service
 
 Globals:
   Function:
@@ -453,7 +453,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-handler"
-      CodeUri: dist/
+      CodeUri: backend/dist/
       Handler: handler.handler
       Environment:
         Variables:

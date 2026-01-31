@@ -1,7 +1,8 @@
 /**
- * Deploy script for Image Workshop WebUI
+ * AWS Lambda Fullstack Template - Frontend Deploy Script
  *
  * Uploads the built static files to S3 and invalidates CloudFront cache.
+ * This script expects the frontend to already be built in frontend/dist/
  */
 
 import {
@@ -26,10 +27,11 @@ import { join, extname } from "path";
 // Configuration
 // ============================================================================
 
-const STACK_NAME = process.env.STACK_NAME || "image-workshop-stack";
+// Read stack name from samconfig.toml or use environment variable
+const STACK_NAME = process.env.STACK_NAME || "my-fullstack-app";
 const AWS_PROFILE = process.env.AWS_PROFILE;
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
-const DIST_DIR = join(import.meta.dir, "..", "dist");
+const DIST_DIR = join(import.meta.dir, "..", "frontend", "dist");
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -210,7 +212,7 @@ async function invalidateCache(
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("Image Workshop WebUI Deploy");
+  console.log("Frontend Deploy");
   console.log("=".repeat(60));
   console.log();
 
@@ -218,14 +220,12 @@ async function main() {
   try {
     await stat(DIST_DIR);
   } catch {
-    console.error(`Error: ${DIST_DIR} does not exist. Run 'bun run build' first.`);
+    console.error(`Error: ${DIST_DIR} does not exist. Run 'bun run build:frontend' first.`);
     process.exit(1);
   }
 
-  // Create clients
   const clients = createClients();
 
-  // Get stack outputs
   console.log(`Getting outputs from stack: ${STACK_NAME}`);
   const outputs = await getStackOutputs(clients.cf);
   console.log();
@@ -241,18 +241,15 @@ async function main() {
     throw new Error("CloudFrontDistributionId not found in stack outputs");
   }
 
-  // Clear and upload
   await clearBucket(clients.s3, uiBucket);
   console.log();
 
   const fileCount = await uploadFiles(clients.s3, uiBucket);
   console.log();
 
-  // Invalidate cache
   await invalidateCache(clients.cloudfront, distributionId);
   console.log();
 
-  // Done
   console.log("=".repeat(60));
   console.log("Deploy complete!");
   console.log(`  Files uploaded: ${fileCount}`);

@@ -112,7 +112,7 @@ export async function callStabilityApi(
       "Content-Type": contentType,
       Accept: "application/json",
     },
-    body: body,
+    body: body as BodyInit,
   });
 
   if (!response.ok) {

@@ -1,0 +1,22 @@
+# ==============================================================================
+# AWS Lambda Fullstack Template - SAM Configuration
+# ==============================================================================
+# 
+# Copy this file and customize for your project:
+#   1. Change stack_name to your project name
+#   2. Update s3_prefix to match
+#   3. Add your parameter_overrides as needed
+#
+# ==============================================================================
+
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "my-fullstack-app"
+resolve_s3 = true
+s3_prefix = "my-fullstack-app"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+# Add parameter overrides as needed:
+# parameter_overrides = "CustomDomainName=\"app.example.com\" CustomDomainCertificateArn=\"arn:aws:acm:...\""

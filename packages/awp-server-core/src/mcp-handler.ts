@@ -206,22 +206,10 @@ export class McpHandler {
       };
     }
 
-    const { name, arguments: args, _casBlobContext } = params;
+    const { name, arguments: args } = params;
 
-    // Log incoming CAS context for debugging
-    if (_casBlobContext) {
-      console.log("[McpHandler] tools/call received _casBlobContext:", {
-        hasTicket: !!_casBlobContext.ticket,
-        realm: _casBlobContext.realm,
-        endpoint: _casBlobContext.endpoint,
-        writable: _casBlobContext.writable,
-      });
-    } else {
-      console.log("[McpHandler] tools/call: No _casBlobContext provided by client");
-    }
-
-    // Execute the tool
-    const result = await this.portal.executeTool(name, args ?? {}, _casBlobContext);
+    // Execute the tool (CAS context will be extracted from #cas.endpoint in args)
+    const result = await this.portal.executeTool(name, args ?? {});
 
     // Format response
     const callResponse: McpToolsCallResponse = {

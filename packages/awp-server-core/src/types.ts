@@ -234,8 +234,6 @@ export interface McpToolsListResponse {
 export interface McpToolsCallParams {
   name: string;
   arguments?: Record<string, unknown>;
-  /** Optional CAS blob context from AWP clients */
-  _casBlobContext?: CasBlobContext;
 }
 
 /**
@@ -298,6 +296,18 @@ export class TicketCreationError extends Error {
   constructor(message: string) {
     super(`Failed to create CAS ticket: ${message}`);
     this.name = "TicketCreationError";
+  }
+}
+
+export type CasTicketErrorCode = "NOT_FOUND" | "EXPIRED" | "FETCH_FAILED";
+
+export class CasTicketError extends Error {
+  public readonly code: CasTicketErrorCode;
+
+  constructor(message: string, code: CasTicketErrorCode) {
+    super(message);
+    this.name = "CasTicketError";
+    this.code = code;
   }
 }
 

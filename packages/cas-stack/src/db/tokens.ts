@@ -160,6 +160,18 @@ export class TokensDb {
   }
 
   /**
+   * Get a ticket by ID
+   * Returns null if not found, expired, or not a ticket type
+   */
+  async getTicket(ticketId: string): Promise<Ticket | null> {
+    const token = await this.getToken(ticketId);
+    if (!token || token.type !== "ticket") {
+      return null;
+    }
+    return token as Ticket;
+  }
+
+  /**
    * Mark ticket as written (atomic operation)
    * Returns true if successful, false if already written
    */
