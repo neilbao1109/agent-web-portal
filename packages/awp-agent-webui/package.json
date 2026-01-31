@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "biome check src",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "bun run scripts/deploy.ts"
   },
   "dependencies": {
     "@agent-web-portal/awp-client-browser": "workspace:*",
@@ -25,6 +26,10 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.975.0",
+    "@aws-sdk/client-cloudfront": "^3.975.0",
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@types/bun": "latest",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",

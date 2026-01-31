@@ -1,0 +1,12 @@
+{
+  "name": "@agent-web-portal/awp-agent-stack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AWS SAM stack for AWP Agent (WebUI + future backend services)",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required for CloudFormation template'",
+    "deploy": "sam deploy --guided",
+    "deploy:prod": "sam deploy --config-env prod"
+  }
+}

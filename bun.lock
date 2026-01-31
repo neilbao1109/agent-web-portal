@@ -40,12 +40,20 @@
         "remark-gfm": "^4.0.0",
       },
       "devDependencies": {
+        "@aws-sdk/client-cloudformation": "^3.975.0",
+        "@aws-sdk/client-cloudfront": "^3.975.0",
+        "@aws-sdk/client-s3": "^3.975.0",
+        "@types/bun": "latest",
         "@types/react": "^18.2.55",
         "@types/react-dom": "^18.2.19",
         "@vitejs/plugin-react": "^4.2.1",
         "typescript": "^5.3.3",
         "vite": "^5.1.0",
       },
+    },
+    "packages/awp-agent-webui-stack": {
+      "name": "@agent-web-portal/awp-agent-webui-stack",
+      "version": "0.1.0",
     },
     "packages/awp-client-browser": {
       "name": "@agent-web-portal/awp-client-browser",
@@ -454,6 +462,8 @@
     "@agent-web-portal/auth": ["@agent-web-portal/auth@workspace:packages/auth"],
 
     "@agent-web-portal/awp-agent-webui": ["@agent-web-portal/awp-agent-webui@workspace:packages/awp-agent-webui"],
+
+    "@agent-web-portal/awp-agent-webui-stack": ["@agent-web-portal/awp-agent-webui-stack@workspace:packages/awp-agent-webui-stack"],
 
     "@agent-web-portal/awp-client-browser": ["@agent-web-portal/awp-client-browser@workspace:packages/awp-client-browser"],
 

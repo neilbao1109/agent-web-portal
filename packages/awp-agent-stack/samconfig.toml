@@ -1,0 +1,23 @@
+# SAM deployment configuration for AWP Agent Stack
+# Usage:
+#   sam deploy --guided           # First time setup
+#   sam deploy --config-env prod  # Deploy with custom domain
+
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "awp-agent"
+resolve_s3 = true
+s3_prefix = "awp-agent"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+
+[prod.deploy.parameters]
+stack_name = "awp-agent"
+resolve_s3 = true
+s3_prefix = "awp-agent"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "CustomDomainName=\"agent.awp.shazhou.me\" CustomDomainCertificateArn=\"arn:aws:acm:us-east-1:914369185440:certificate/755d1707-063a-4256-91c6-31cddac32799\""
