@@ -481,4 +481,99 @@ export class AwpCasManager {
 
     return result.result;
   }
+
+  // ============================================================================
+  // CAS Content Access
+  // ============================================================================
+
+  /**
+   * Fetch CAS content using P256 signed authentication
+   *
+   * @param casEndpoint - CAS endpoint URL (e.g., "https://cas.example.com/api")
+   * @param key - CAS key (e.g., "sha256:abc123...")
+   * @returns Content data and type, or null if not found
+   */
+  async fetchCasContent(
+    casEndpoint: string,
+    key: string
+  ): Promise<{ data: Uint8Array; contentType: string } | null> {
+    // Find an endpoint that uses this CAS endpoint
+    let auth: AwpAuth | undefined;
+    for (const endpoint of this.endpoints.values()) {
+      if (endpoint.casEndpoint === casEndpoint && endpoint.auth) {
+        auth = endpoint.auth;
+        break;
+      }
+    }
+
+    if (!auth) {
+      console.warn("[AwpCasManager] No authenticated endpoint found for CAS:", casEndpoint);
+      return null;
+    }
+
+    try {
+      // Use @me as realm for user's own content
+      const rawUrl = `${casEndpoint}/cas/@me/raw/${encodeURIComponent(key)}`;
+      const signedHeaders = await auth.sign(casEndpoint, "GET", rawUrl, "");
+
+      // Fetch raw node to get file metadata
+      const rawRes = await fetch(rawUrl, {
+        method: "GET",
+        headers: signedHeaders,
+      });
+
+      if (!rawRes.ok) {
+        console.error("[AwpCasManager] Failed to fetch raw node:", rawRes.status);
+        return null;
+      }
+
+      const rawNode = (await rawRes.json()) as {
+        kind: string;
+        chunks?: string[];
+        contentType?: string;
+      };
+
+      if (rawNode.kind !== "file") {
+        console.error("[AwpCasManager] Expected file node, got:", rawNode.kind);
+        return null;
+      }
+
+      // Fetch all chunks and concatenate
+      const chunks: Uint8Array[] = [];
+      for (const chunkKey of rawNode.chunks ?? []) {
+        const chunkUrl = `${casEndpoint}/cas/@me/chunk/${encodeURIComponent(chunkKey)}`;
+        const chunkHeaders = await auth.sign(casEndpoint, "GET", chunkUrl, "");
+
+        const chunkRes = await fetch(chunkUrl, {
+          method: "GET",
+          headers: chunkHeaders,
+        });
+
+        if (!chunkRes.ok) {
+          console.error("[AwpCasManager] Failed to fetch chunk:", chunkRes.status);
+          return null;
+        }
+
+        const chunkData = new Uint8Array(await chunkRes.arrayBuffer());
+        chunks.push(chunkData);
+      }
+
+      // Concatenate chunks
+      const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const data = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        data.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      return {
+        data,
+        contentType: rawNode.contentType ?? "application/octet-stream",
+      };
+    } catch (error) {
+      console.error("[AwpCasManager] Failed to fetch CAS content:", error);
+      return null;
+    }
+  }
 }

@@ -674,7 +674,14 @@ export class Router {
     }
 
     const requestedRealm = casMatch[1]!;
-    const subPath = casMatch[2] ?? "";
+    let subPath = casMatch[2] ?? "";
+
+    // Support ticket URL as endpoint base: /cas/{realm}/ticket/{ticketId}/...
+    // Strip the /ticket/{ticketId} prefix if present, as ticket auth is handled via Authorization header
+    const ticketPathMatch = subPath.match(/^\/ticket\/[^/]+(\/.*)?$/);
+    if (ticketPathMatch) {
+      subPath = ticketPathMatch[1] ?? "";
+    }
 
     // Authenticate
     const auth = await this.authMiddleware.authenticate(req);

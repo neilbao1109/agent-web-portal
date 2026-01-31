@@ -279,9 +279,24 @@ export class ServerPortal {
     // Try to get CAS context from various sources
     let context = casContext;
 
+    // Log CAS context sources for debugging
+    if (casContext) {
+      console.log("[ServerPortal] Using CAS context from _casBlobContext:", {
+        ticket: casContext.ticket,
+        realm: casContext.realm,
+        endpoint: casContext.endpoint,
+      });
+    }
+
     // If no context provided, try to extract from #cas-endpoint in arguments
     if (!context) {
       context = this.extractCasContextFromArgs(args);
+      if (context) {
+        console.log("[ServerPortal] Using CAS context from #cas-endpoint in args:", {
+          ticket: context.ticket,
+          realm: context.realm,
+        });
+      }
     }
 
     // If still no context, try to create one using the server's ticket provider
@@ -289,7 +304,10 @@ export class ServerPortal {
       try {
         // Create a writable ticket with wildcard scope
         context = await this.ticketProvider.createTicket(["*"], true);
-        console.log("[ServerPortal] Created CAS context using server ticket provider");
+        console.log("[ServerPortal] Created CAS context using server ticket provider (agent realm):", {
+          ticket: context.ticket,
+          realm: context.realm,
+        });
       } catch (error) {
         console.warn("[ServerPortal] Failed to create CAS context using ticket provider:", error);
       }

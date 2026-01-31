@@ -76,6 +76,16 @@ export class BufferedCasClient implements IBufferedCasClient {
   constructor(context: CasBlobContext, storage?: LocalStorageProvider) {
     this.client = CasClient.fromContext(context, storage);
     this.chunkThreshold = context.config.chunkThreshold;
+    
+    // Log the parsed client configuration for debugging
+    const clientEndpoint = (this.client as unknown as { endpoint: string }).endpoint;
+    const clientRealm = (this.client as unknown as { realm?: string }).realm;
+    console.log("[BufferedCasClient] Created with:", {
+      parsedEndpoint: clientEndpoint,
+      parsedRealm: clientRealm,
+      originalContextEndpoint: context.endpoint,
+      originalContextRealm: context.realm,
+    });
   }
 
   // ============================================================================
@@ -377,21 +387,28 @@ export class BufferedCasClient implements IBufferedCasClient {
 
   /**
    * Compute file node key (deterministic based on chunks and metadata)
+   * Must match CAS server's file node format exactly
    */
   private async computeFileKey(
     chunks: string[],
     contentType: string,
     size: number
   ): Promise<string> {
-    const metadata = JSON.stringify({ chunks, contentType, size });
+    // Must match CAS server format: { kind: "file", chunks, contentType, size }
+    const metadata = JSON.stringify({ kind: "file", chunks, contentType, size });
     const encoder = new TextEncoder();
     return computeKey(encoder.encode(metadata));
   }
 
   /**
    * Compute collection node key (deterministic based on children)
+   * 
+   * NOTE: This does NOT match CAS server format exactly (server includes size).
+   * The key returned here is used locally, and the actual key is returned by the server.
+   * For collections, we rely on the server's returned key after upload.
    */
   private async computeCollectionKey(children: Record<string, string>): Promise<string> {
+    // Use sorted entries for deterministic key
     const sorted = Object.entries(children).sort(([a], [b]) => a.localeCompare(b));
     const metadata = JSON.stringify(sorted);
     const encoder = new TextEncoder();
@@ -469,19 +486,12 @@ export class BufferedCasClient implements IBufferedCasClient {
    * Upload a chunk to CAS
    */
   private async uploadChunk(key: string, data: Uint8Array): Promise<void> {
-    // Access the underlying client's private method via reflection or use public API
-    // For now, we'll use the CasClient's putFile which handles chunking
-    // But since we've already computed the key, we need to upload directly
-
-    // We need to access the internal upload mechanism
-    // Let's add a method to get the client's base URL and make the request directly
-    const context = (this.client as unknown as { endpoint: string; realm?: string }).endpoint;
-    const realm = (this.client as unknown as { realm?: string }).realm ?? "@me";
+    const apiBase = this.client.getApiBaseUrl();
 
     // Create a new ArrayBuffer copy to satisfy Blob type requirements
     const arrayBuffer = new ArrayBuffer(data.length);
     new Uint8Array(arrayBuffer).set(data);
-    const res = await fetch(`${context}/cas/${realm}/chunk/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${apiBase}/chunk/${encodeURIComponent(key)}`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),
@@ -500,10 +510,9 @@ export class BufferedCasClient implements IBufferedCasClient {
    * Upload a file node to CAS
    */
   private async uploadFileNode(file: PendingFile): Promise<void> {
-    const context = (this.client as unknown as { endpoint: string }).endpoint;
-    const realm = (this.client as unknown as { realm?: string }).realm ?? "@me";
+    const apiBase = this.client.getApiBaseUrl();
 
-    const res = await fetch(`${context}/cas/${realm}/file`, {
+    const res = await fetch(`${apiBase}/file`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),
@@ -525,10 +534,9 @@ export class BufferedCasClient implements IBufferedCasClient {
    * Upload a collection node to CAS
    */
   private async uploadCollectionNode(collection: PendingCollection): Promise<void> {
-    const context = (this.client as unknown as { endpoint: string }).endpoint;
-    const realm = (this.client as unknown as { realm?: string }).realm ?? "@me";
+    const apiBase = this.client.getApiBaseUrl();
 
-    const res = await fetch(`${context}/cas/${realm}/collection`, {
+    const res = await fetch(`${apiBase}/collection`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),

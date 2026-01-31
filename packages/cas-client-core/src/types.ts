@@ -8,10 +8,21 @@
 // Authentication Types
 // ============================================================================
 
+/**
+ * Function to sign a request with P256
+ * Returns headers: { "X-AWP-Pubkey", "X-AWP-Timestamp", "X-AWP-Signature" }
+ */
+export type P256SignFn = (
+  method: string,
+  url: string,
+  body?: string
+) => Promise<Record<string, string>>;
+
 export type CasAuth =
   | { type: "user"; token: string }
   | { type: "agent"; token: string }
-  | { type: "ticket"; id: string };
+  | { type: "ticket"; id: string }
+  | { type: "p256"; sign: P256SignFn };
 
 // ============================================================================
 // Client Configuration

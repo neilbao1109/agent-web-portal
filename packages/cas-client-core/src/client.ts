@@ -46,6 +46,31 @@ export class CasClient {
     this.realm = config.realm;
   }
 
+  /**
+   * Get the API base URL for CAS operations
+   * 
+   * For ticket auth: endpoint is already /api/cas/{realm}/ticket/{ticketId}, use directly
+   * For user/agent auth: endpoint is /api, need to append /cas/{realm}
+   */
+  private getApiBase(): string {
+    if (this.auth.type === "ticket") {
+      // Ticket endpoint already contains /cas/{realm}/ticket/{ticketId}
+      // CAS server will strip /ticket/{ticketId} and route correctly
+      return this.endpoint;
+    }
+    
+    // For user/agent auth, append /cas/{realm}
+    const realm = this.realm ?? "@me";
+    return `${this.endpoint}/cas/${realm}`;
+  }
+
+  /**
+   * Get the API base URL (public accessor for BufferedCasClient)
+   */
+  getApiBaseUrl(): string {
+    return this.getApiBase();
+  }
+
   // ============================================================================
   // Static Factory Methods
   // ============================================================================
@@ -79,10 +104,11 @@ export class CasClient {
   }
 
   static fromContext(context: CasBlobContext, storage?: LocalStorageProvider): CasClient {
-    // Parse the endpoint URL to extract base URL (context.endpoint is the full ticket endpoint)
-    const { baseUrl } = parseEndpoint(context.endpoint);
+    // Use the full ticket endpoint URL directly - CAS server supports ticket URL as endpoint base
+    // The ticket URL format is: https://host/api/cas/{realm}/ticket/{ticketId}
+    // The server will strip /ticket/{ticketId} and route to the appropriate handler
     return new CasClient({
-      endpoint: baseUrl,
+      endpoint: context.endpoint,
       auth: { type: "ticket", id: context.ticket },
       storage,
       chunkThreshold: context.config.chunkThreshold,
@@ -155,14 +181,9 @@ export class CasClient {
         return `Agent ${this.auth.token}`;
       case "ticket":
         return `Ticket ${this.auth.id}`;
+      default:
+        throw new Error(`Unknown auth type: ${(this.auth as { type: string }).type}`);
     }
-  }
-
-  private async getRealm(): Promise<string> {
-    if (this.realm) {
-      return this.realm;
-    }
-    return "@me";
   }
 
   // ============================================================================
@@ -185,8 +206,7 @@ export class CasClient {
    * Get application layer node (CasNode)
    */
   async getNode(key: string): Promise<CasNode> {
-    const realm = await this.getRealm();
-    const res = await fetch(`${this.endpoint}/cas/${realm}/node/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${this.getApiBase()}/node/${encodeURIComponent(key)}`, {
       headers: { Authorization: this.getAuthHeader() },
     });
 
@@ -209,8 +229,7 @@ export class CasClient {
       }
     }
 
-    const realm = await this.getRealm();
-    const res = await fetch(`${this.endpoint}/cas/${realm}/raw/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${this.getApiBase()}/raw/${encodeURIComponent(key)}`, {
       headers: { Authorization: this.getAuthHeader() },
     });
 
@@ -263,8 +282,7 @@ export class CasClient {
       }
     }
 
-    const realm = await this.getRealm();
-    const res = await fetch(`${this.endpoint}/cas/${realm}/chunk/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${this.getApiBase()}/chunk/${encodeURIComponent(key)}`, {
       headers: { Authorization: this.getAuthHeader() },
     });
 
@@ -355,9 +373,8 @@ export class CasClient {
    */
   private async uploadChunk(content: Uint8Array): Promise<string> {
     const key = await computeKey(content);
-    const realm = await this.getRealm();
 
-    const res = await fetch(`${this.endpoint}/cas/${realm}/chunk/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${this.getApiBase()}/chunk/${encodeURIComponent(key)}`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),
@@ -383,9 +400,7 @@ export class CasClient {
     contentType: string,
     _totalSize: number
   ): Promise<string> {
-    const realm = await this.getRealm();
-
-    const res = await fetch(`${this.endpoint}/cas/${realm}/file`, {
+    const res = await fetch(`${this.getApiBase()}/file`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),
@@ -462,9 +477,7 @@ export class CasClient {
    * Create a collection node
    */
   private async createCollectionNode(children: Record<string, string>): Promise<string> {
-    const realm = await this.getRealm();
-
-    const res = await fetch(`${this.endpoint}/cas/${realm}/collection`, {
+    const res = await fetch(`${this.getApiBase()}/collection`, {
       method: "PUT",
       headers: {
         Authorization: this.getAuthHeader(),

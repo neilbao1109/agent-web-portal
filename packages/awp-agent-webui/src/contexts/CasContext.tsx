@@ -6,9 +6,7 @@
  */
 
 import { createContext, useContext, useMemo, useRef, useCallback, type ReactNode } from "react";
-import { CasClient, type LocalStorageProvider } from "@agent-web-portal/cas-client-browser";
-import type { KeyStorage } from "@agent-web-portal/client";
-import { AwpAuth } from "@agent-web-portal/client";
+import type { AwpCasManager } from "@agent-web-portal/awp-client-browser";
 
 /** Cached content result */
 interface CachedContent {
@@ -27,16 +25,13 @@ interface CasContextValue {
   casEndpoint: string | null;
   /** Whether CAS is authenticated */
   isAuthenticated: boolean;
-  /** Get a CAS client for accessing content */
-  getCasClient: () => CasClient | null;
-  /** Fetch CAS content by key (creates ticket, fetches data) */
+  /** Fetch CAS content by key (uses P256 signed auth) */
   fetchCasContent: (key: string) => Promise<{ data: Uint8Array; contentType: string } | null>;
 }
 
 const CasContext = createContext<CasContextValue>({
   casEndpoint: null,
   isAuthenticated: false,
-  getCasClient: () => null,
   fetchCasContent: async () => null,
 });
 
@@ -46,12 +41,8 @@ export interface CasContextProviderProps {
   casEndpoint: string | null;
   /** Whether CAS is authenticated */
   isAuthenticated: boolean;
-  /** Key storage for authentication */
-  keyStorage: KeyStorage;
-  /** Client name for auth */
-  clientName: string;
-  /** Local storage provider for caching (optional) */
-  localStorage?: LocalStorageProvider;
+  /** AWP CAS Manager instance */
+  manager: AwpCasManager;
 }
 
 /**
@@ -61,52 +52,23 @@ export function CasContextProvider({
   children,
   casEndpoint,
   isAuthenticated,
-  keyStorage,
-  clientName,
-  localStorage,
+  manager,
 }: CasContextProviderProps) {
-  // Create auth instance
-  const auth = useMemo(() => {
-    return new AwpAuth({
-      clientName,
-      keyStorage,
-    });
-  }, [clientName, keyStorage]);
-
   // Cache for fetched content (persists across renders)
   const contentCacheRef = useRef<Map<string, CachedContent>>(new Map());
   // In-flight requests to deduplicate concurrent fetches
   const inflightRef = useRef<Map<string, InflightRequest>>(new Map());
   // Store refs for stable callback
-  const authRef = useRef(auth);
   const casEndpointRef = useRef(casEndpoint);
   const isAuthenticatedRef = useRef(isAuthenticated);
-  const localStorageRef = useRef(localStorage);
+  const managerRef = useRef(manager);
 
   // Update refs when values change
-  authRef.current = auth;
   casEndpointRef.current = casEndpoint;
   isAuthenticatedRef.current = isAuthenticated;
-  localStorageRef.current = localStorage;
+  managerRef.current = manager;
 
-  // Create a function to get CAS client
-  const getCasClient = useMemo(() => {
-    return (): CasClient | null => {
-      if (!casEndpoint || !isAuthenticated) {
-        return null;
-      }
-
-      // Create a new CasClient with user token auth
-      // Note: For now we use a simple approach - the actual auth is done via signed requests
-      return new CasClient({
-        endpoint: casEndpoint,
-        auth: { type: "user", token: "" }, // Will be overridden by signed requests
-        storage: localStorage,
-      });
-    };
-  }, [casEndpoint, isAuthenticated, localStorage]);
-
-  // Fetch CAS content with caching and deduplication
+  // Fetch CAS content with caching and deduplication using P256 signed auth
   const fetchCasContent = useCallback(
     async (key: string): Promise<{ data: Uint8Array; contentType: string } | null> => {
       const endpoint = casEndpointRef.current;
@@ -134,65 +96,26 @@ export function CasContextProvider({
       // Create new request
       const requestPromise = (async (): Promise<CachedContent | null> => {
         try {
-          // First, create a ticket for this specific key
-          const ticketUrl = `${endpoint}/auth/ticket`;
-          const ticketBody = JSON.stringify({
-            scope: key,
-            writable: false,
-            expiresIn: 3600,
-          });
+          console.log("[CasContext] Fetching CAS content with P256 auth:", key);
 
-          // Sign the ticket request
-          const signedHeaders = await authRef.current.sign(endpoint, "POST", ticketUrl, ticketBody);
+          // Use AwpCasManager's fetchCasContent which handles P256 signing
+          const result = await managerRef.current.fetchCasContent(endpoint, key);
 
-          const ticketRes = await fetch(ticketUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...signedHeaders,
-            },
-            body: ticketBody,
-          });
-
-          if (!ticketRes.ok) {
-            console.error("[CasContext] Failed to create ticket:", ticketRes.status);
+          if (!result) {
+            console.error("[CasContext] Failed to fetch CAS content");
             return null;
           }
 
-          const ticket = await ticketRes.json() as {
-            id: string;
-            realm: string;
-            endpoint: string;
-            config: { chunkThreshold: number };
-          };
-
-          console.log("[CasContext] Ticket created:", {
-            id: ticket.id,
-            realm: ticket.realm,
-          });
-
-          // Now use the ticket to fetch the content with realm from ticket
-          const client = new CasClient({
-            endpoint,
-            auth: { type: "ticket", id: ticket.id },
-            storage: localStorageRef.current,
-            realm: ticket.realm,
-          });
-
-          // Open the file
-          const handle = await client.openFile(key);
-          const data = await handle.bytes();
-
-          const result: CachedContent = {
-            data,
-            contentType: handle.contentType,
+          const cached: CachedContent = {
+            data: result.data,
+            contentType: result.contentType,
           };
 
           // Store in cache
-          contentCacheRef.current.set(key, result);
+          contentCacheRef.current.set(key, cached);
           console.log("[CasContext] Cached content for:", key);
 
-          return result;
+          return cached;
         } catch (error) {
           console.error("[CasContext] Failed to fetch CAS content:", error);
           return null;
@@ -213,9 +136,8 @@ export function CasContextProvider({
   const value = useMemo<CasContextValue>(() => ({
     casEndpoint,
     isAuthenticated,
-    getCasClient,
     fetchCasContent,
-  }), [casEndpoint, isAuthenticated, getCasClient, fetchCasContent]);
+  }), [casEndpoint, isAuthenticated, fetchCasContent]);
 
   return (
     <CasContext.Provider value={value}>

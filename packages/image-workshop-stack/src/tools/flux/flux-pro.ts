@@ -39,10 +39,14 @@ export const fluxProTool = defineTool((cas) => ({
   handler: async (args) => {
     const apiKey = await getBflApiKey();
 
+    // BFL API requires dimensions to be multiples of 32
+    const width = Math.round(args.width / 32) * 32;
+    const height = Math.round(args.height / 32) * 32;
+
     const result = await callBflApi("/v1/flux-pro-1.1", apiKey, {
       prompt: args.prompt,
-      width: args.width,
-      height: args.height,
+      width,
+      height,
       prompt_upsampling: args.prompt_upsampling,
       safety_tolerance: args.safety_tolerance,
       seed: args.seed,

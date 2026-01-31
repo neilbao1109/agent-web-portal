@@ -33,7 +33,10 @@ export const fluxExpandTool = defineTool((cas) => ({
     output_format: z.enum(["png", "jpeg"]).default("png").describe("Output image format"),
   }),
   outputSchema: z.object({
-    resultKey: z.string().describe("CAS key of the expanded image"),
+    image: z.object({
+      "cas-node": z.string().describe("CAS key of the expanded image"),
+      path: z.string().describe("Path within the CAS node"),
+    }),
     metadata: z.object({
       id: z.string().describe("Task ID from BFL API"),
       seed: z.number().optional().describe("Seed used for generation"),
@@ -66,7 +69,10 @@ export const fluxExpandTool = defineTool((cas) => ({
     const resultKey = await cas.putFile(outputBuffer, contentType);
 
     return {
-      resultKey,
+      image: {
+        "cas-node": resultKey,
+        path: ".",
+      },
       metadata: {
         id: result.id,
         seed: result.seed,

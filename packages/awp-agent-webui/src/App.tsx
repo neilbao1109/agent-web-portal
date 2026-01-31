@@ -267,8 +267,7 @@ export function App() {
       <CasContextProvider
         casEndpoint={casEndpoint}
         isAuthenticated={isCasAuthenticated}
-        keyStorage={keyStorage}
-        clientName={clientName}
+        manager={manager}
       >
         <Box sx={{ display: 'flex', height: '100vh' }}>
         {/* App Bar */}

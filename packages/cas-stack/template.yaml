@@ -450,9 +450,13 @@ Resources:
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
             ResponseHeadersPolicyId: !Ref CorsResponseHeadersPolicy
-        # Note: CustomErrorResponses removed to prevent API 403/404 responses
-        # from being replaced with S3 index.html. SPA routing should be handled
-        # by the frontend application or using a different approach.
+        # Only handle 403 errors (S3 OAC returns 403 for missing files)
+        # API Gateway returns 404 for missing resources, which won't be affected
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
         PriceClass: PriceClass_100
 
   CorsResponseHeadersPolicy:
